@@ -3,8 +3,8 @@ import { useAuth } from "../context/AuthContext";
 
 export function LoginPage() {
   const { login } = useAuth();
-  const [email, setEmail] = useState("admin@example.com");
-  const [password, setPassword] = useState("admin123");
+  const [email, setEmail] = useState("salvin@gmail.com");
+  const [password, setPassword] = useState("salvin@123");
   const [error, setError] = useState("");
 
   const submit = async (e) => {

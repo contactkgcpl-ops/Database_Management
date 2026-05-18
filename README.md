@@ -100,8 +100,8 @@ Open `http://localhost:5173`.
 
 Default admin:
 
-- Email: `admin@example.com`
-- Password: `admin123`
+- Email: `salvin@gmail.com`
+- Password: `salvin@123`
 
 ## MySQL
 
@@ -110,6 +110,112 @@ Change `backend/.env`:
 ```env
 DATABASE_URL=mysql+pymysql://erp_user:erp_password@localhost:3306/erp_db
 ```
+
+## Hostinger VPS Deployment
+
+Use Ubuntu VPS with Docker, Nginx, and systemd/PM2 or Docker Compose.
+
+1. Point domain DNS `A` record to VPS public IP.
+2. SSH into VPS:
+
+```bash
+ssh root@YOUR_SERVER_IP
+```
+
+3. Install packages:
+
+```bash
+apt update
+apt install -y git nginx python3-venv python3-pip nodejs npm mysql-server certbot python3-certbot-nginx
+```
+
+4. Clone project:
+
+```bash
+git clone YOUR_REPO_URL /var/www/data-management
+cd /var/www/data-management
+```
+
+5. Create MySQL DB:
+
+```sql
+CREATE DATABASE erp_db;
+CREATE USER 'erp_user'@'localhost' IDENTIFIED BY 'CHANGE_STRONG_PASSWORD';
+GRANT ALL PRIVILEGES ON erp_db.* TO 'erp_user'@'localhost';
+FLUSH PRIVILEGES;
+```
+
+6. Configure backend env at `/var/www/data-management/backend/.env`:
+
+```env
+DATABASE_URL=mysql+pymysql://erp_user:CHANGE_STRONG_PASSWORD@localhost:3306/erp_db
+JWT_SECRET=CHANGE_LONG_RANDOM_SECRET
+BACKEND_CORS_ORIGINS=https://yourdomain.com
+```
+
+7. Start backend:
+
+```bash
+cd /var/www/data-management/backend
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --host 127.0.0.1 --port 8000
+```
+
+First backend start creates tables, permissions, and default admin.
+
+8. Build frontend:
+
+```bash
+cd /var/www/data-management/frontend
+npm install
+VITE_API_URL=https://yourdomain.com/api npm run build
+```
+
+9. Configure Nginx:
+
+```nginx
+server {
+    server_name yourdomain.com;
+
+    root /var/www/data-management/frontend/dist;
+    index index.html;
+
+    location / {
+        try_files $uri /index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000/api/;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /uploads/ {
+        proxy_pass http://127.0.0.1:8000/uploads/;
+    }
+}
+```
+
+10. Enable HTTPS:
+
+```bash
+certbot --nginx -d yourdomain.com
+```
+
+11. Test:
+
+```bash
+curl https://yourdomain.com/api/health
+```
+
+Login:
+
+- Email: `salvin@gmail.com`
+- Password: `salvin@123`
 
 ## Dynamic CSV Format
 

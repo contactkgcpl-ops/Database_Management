@@ -55,6 +55,10 @@ DEFAULT_PROPERTY_OPTIONS = {
     ],
 }
 
+DEFAULT_ADMIN_NAME = "Salvin Admin"
+DEFAULT_ADMIN_EMAIL = "salvin@gmail.com"
+DEFAULT_ADMIN_PASSWORD = "salvin@123"
+
 
 def ensure_dynamic_column(db: Session, prop: Property) -> None:
     if prop.is_multi_value:
@@ -148,17 +152,22 @@ def seed_defaults(db: Session) -> None:
         if permission.id not in existing:
             db.add(RolePermission(role_id=admin_role.id, permission_id=permission.id))
 
-    admin = db.query(User).filter(User.email == "admin@example.com").first()
+    admin = db.query(User).filter(User.email == DEFAULT_ADMIN_EMAIL).first()
     if not admin:
         db.add(
             User(
-                name="System Admin",
-                email="admin@example.com",
-                hashed_password=hash_password("admin123"),
+                name=DEFAULT_ADMIN_NAME,
+                email=DEFAULT_ADMIN_EMAIL,
+                hashed_password=hash_password(DEFAULT_ADMIN_PASSWORD),
                 role_id=admin_role.id,
                 is_active=True,
             )
         )
+    else:
+        admin.name = DEFAULT_ADMIN_NAME
+        admin.hashed_password = hash_password(DEFAULT_ADMIN_PASSWORD)
+        admin.role_id = admin_role.id
+        admin.is_active = True
 
     for key, name, is_active, sort_order in DEFAULT_GRIDS:
         grid = db.query(DisplayGrid).filter(DisplayGrid.key == key).first()

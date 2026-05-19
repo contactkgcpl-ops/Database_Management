@@ -3,8 +3,8 @@ import { useAuth } from "../context/AuthContext";
 
 export function LoginPage() {
   const { login } = useAuth();
-  const [email, setEmail] = useState("salvin@gmail.com");
-  const [password, setPassword] = useState("salvin@123");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
 
   const submit = async (e) => {
@@ -18,10 +18,10 @@ export function LoginPage() {
 
   return (
     <main className="login">
-      <form className="panel login-box" onSubmit={submit}>
+      <form className="panel login-box" onSubmit={submit} autoComplete="off">
         <h1>Marketing ERP</h1>
-        <label>Email<input value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-        <label>Password<input type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
+        <label>Email<input name="email" autoComplete="off" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+        <label>Password<input name="password" autoComplete="new-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></label>
         {error && <p className="error">{error}</p>}
         <button>Sign in</button>
       </form>

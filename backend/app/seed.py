@@ -50,7 +50,7 @@ DEFAULT_PROPERTY_OPTIONS = {
     ],
     "connected_source": [
         ("Call", "call", 0),
-        ("Email", "Email", 10),
+        ("Email", "email", 10),
         ("Whatsapp", "whatsapp", 20),
     ],
 }

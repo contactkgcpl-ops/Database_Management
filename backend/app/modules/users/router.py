@@ -6,13 +6,22 @@ from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import require_permission
+from app.deps import require_any_permission, require_permission
 from app.models import User
 from app.modules.auth.router import serialize_user
 from app.schemas import UserOut
 from app.security import hash_password
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+USER_LIST_PERMISSIONS = [
+    "users.manage",
+    "companies.view",
+    "companies.manage",
+    "leads.assign",
+    "leads.my",
+    "leads.followup",
+]
 
 UPLOAD_DIR = Path("storage/uploads")
 MAX_IMAGE_BYTES = 2 * 1024 * 1024
@@ -139,7 +148,7 @@ def remove_profile_image(image_url: str | None) -> None:
 
 
 @router.get("", response_model=list[UserOut])
-def list_users(db: Session = Depends(get_db), _: User = Depends(require_permission("users.manage"))):
+def list_users(db: Session = Depends(get_db), _: User = Depends(require_any_permission(USER_LIST_PERMISSIONS))):
     return [serialize_user(user) for user in db.query(User).order_by(User.id.desc()).all()]
 
 

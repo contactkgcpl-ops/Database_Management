@@ -6,14 +6,22 @@ import { useNotify } from "../components/NotificationProvider";
 import { useAuth } from "../context/AuthContext";
 import { useLoad } from "../hooks/useLoad";
 import { Pagination } from "../components/Pagination";
+import { orderedVisibleColumns, readColumnKeys, writeColumnKeys } from "../utils/columnConfig";
 
 const emptyForm = {
   company_name: "",
   property_values: [],
 };
 
+const COMPANY_COLUMN_STORAGE_KEY = "crm.grid.columns.companies";
+const COMPANY_STATIC_COLUMNS = [
+  { id: 0, name: "Company Name", field_key: "company_name", grids: [{ grid_key: "companies", grid_width: 200, grid_order: -100 }] },
+  { id: -1, name: "Contact Created By", field_key: "created_by_name", grids: [{ grid_key: "companies", grid_width: 180, grid_order: -90 }] },
+];
+
 function getCompanyPropertyValue(company, property) {
   if (property.field_key === "company_name") return company.company_name || "";
+  if (property.field_key === "created_by_name") return company.created_by_name || "";
   const pv = company.property_values?.find((v) => v.field_key === property.field_key);
   return pv ? pv.value : "";
 }
@@ -26,6 +34,7 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
   const [columnChooserOpen, setColumnChooserOpen] = useState(false);
   const [columnSearch, setColumnSearch] = useState("");
   const [draftColumns, setDraftColumns] = useState([]);
+  const [selectedColumnKeys, setSelectedColumnKeys] = useState(() => readColumnKeys(COMPANY_COLUMN_STORAGE_KEY));
   const [draggedColumn, setDraggedColumn] = useState(null);
   const [companySort, setCompanySort] = useState({ key: "company_name", direction: "asc" });
   const [companyPage, setCompanyPage] = useState(1);
@@ -42,21 +51,22 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
   const companyGridKey = propertyGrids.data[0]?.key || "companies";
   const activeProperties = properties.data.filter((property) => property.is_active);
 
-  const gridProperties = useMemo(() => {
+  const availableGridProperties = useMemo(() => {
     const props = activeProperties
       .filter((property) => property.grids?.some((grid) => grid.grid_key === companyGridKey))
+      .filter((property) => !COMPANY_STATIC_COLUMNS.some((column) => column.field_key === property.field_key))
       .sort((a, b) => {
         const gridA = a.grids?.find((g) => g.grid_key === companyGridKey);
         const gridB = b.grids?.find((g) => g.grid_key === companyGridKey);
         return (gridA?.grid_order || 0) - (gridB?.grid_order || 0);
       });
 
-    // Always include Company Name as a virtual property if not present
-    if (!props.some(p => p.field_key === "company_name")) {
-      return [{ id: 0, name: "Company Name", field_key: "company_name", grids: [{ grid_key: companyGridKey, grid_width: 200, grid_order: -100 }] }, ...props];
-    }
-    return props;
+    return [...COMPANY_STATIC_COLUMNS, ...props];
   }, [activeProperties, companyGridKey]);
+  const gridProperties = useMemo(
+    () => orderedVisibleColumns(availableGridProperties, selectedColumnKeys),
+    [availableGridProperties, selectedColumnKeys]
+  );
 
   const filteredCompanies = useMemo(() => {
     return companies.data.filter((company) =>
@@ -132,6 +142,8 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
       grid_width: getColumnWidth(p),
     }));
     await api.updatePropertyGridColumns(payload);
+    setSelectedColumnKeys(draftColumns);
+    writeColumnKeys(COMPANY_COLUMN_STORAGE_KEY, draftColumns);
     notify("Grid configuration updated", "success");
     setColumnChooserOpen(false);
     properties.reload();
@@ -279,9 +291,9 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
               <button onClick={() => setColumnChooserOpen(false)} style={{ background: "transparent", color: "#fff", padding: "2px", cursor: "pointer" }}><X size={18} /></button>
             </div>
 
-            <div className="column-chooser-container" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", height: "480px" }}>
+            <div className="column-chooser-container" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", height: "min(480px, calc(100vh - 170px))", minHeight: 0 }}>
               {/* Left Side: Property Pool */}
-              <div className="column-pool-side stack" style={{ padding: "16px 20px", borderRight: "1px solid #e2e8f0", backgroundColor: "#fff", gap: "12px" }}>
+              <div className="column-pool-side stack" style={{ padding: "16px 20px", borderRight: "1px solid #e2e8f0", backgroundColor: "#fff", gap: "12px", gridTemplateRows: "auto minmax(0, 1fr) auto", minHeight: 0 }}>
                 <div className="crm-search small" style={{ position: "relative", display: "flex", alignItems: "center" }}>
                   <input
                     placeholder="Search columns..."
@@ -300,8 +312,34 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
                   <Search size={14} style={{ position: "absolute", right: "10px", color: "#94a3b8" }} />
                 </div>
 
-                <div className="scroll-area" style={{ flex: 1, overflowY: "auto", paddingRight: "4px" }}>
+                <div className="scroll-area" style={{ minHeight: 0, overflowY: "auto", paddingRight: "4px" }}>
                   <p style={{ fontSize: "11px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase", marginBottom: "10px", marginTop: "4px" }}>Company Properties</p>
+                  {COMPANY_STATIC_COLUMNS
+                    .filter(p => !columnSearch || p.name.toLowerCase().includes(columnSearch.toLowerCase()))
+                    .map(p => {
+                      const isSelected = draftColumns.includes(p.field_key);
+                      return (
+                        <label key={p.field_key} style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "8px",
+                          padding: "5px 0",
+                          cursor: "pointer",
+                          transition: "color 0.2s",
+                        }}>
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {
+                              if (isSelected) setDraftColumns(prev => prev.filter(k => k !== p.field_key));
+                              else setDraftColumns(prev => [...prev, p.field_key]);
+                            }}
+                            style={{ width: "14px", height: "14px", accentColor: "#176b5b" }}
+                          />
+                          <span style={{ fontSize: "12px", color: isSelected ? "#176b5b" : "#475569", fontWeight: isSelected ? "600" : "400" }}>{p.name}</span>
+                        </label>
+                      );
+                    })}
                   {[
                     ...activeProperties.filter(p =>
                       p.field_key.toLowerCase() !== "company_name" &&
@@ -375,14 +413,14 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
               </div>
 
               {/* Right Side: Selected Columns Order */}
-              <div className="column-order-side stack" style={{ padding: "16px 20px", backgroundColor: "#fff", gap: "12px" }}>
+              <div className="column-order-side stack" style={{ padding: "16px 20px", backgroundColor: "#fff", gap: "12px", gridTemplateRows: "auto minmax(0, 1fr)", minHeight: 0 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <p style={{ fontSize: "11px", fontWeight: "700", color: "#1e293b", textTransform: "uppercase" }}>SELECTED COLUMNS ({draftColumns.length})</p>
                 </div>
 
-                <div className="scroll-area" style={{ flex: 1, overflowY: "auto", paddingRight: "4px" }}>
+                <div className="scroll-area" style={{ minHeight: 0, overflowY: "auto", paddingRight: "4px" }}>
                   {draftColumns.map((key, idx) => {
-                    const prop = [{ id: 0, name: "Company Name", field_key: "company_name" }, ...activeProperties].find(p => p.field_key === key);
+                    const prop = [...COMPANY_STATIC_COLUMNS, ...activeProperties].find(p => p.field_key === key);
                     if (!prop) return null;
 
                     return (
@@ -431,7 +469,7 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
             <div className="modal-actions" style={{ padding: "16px 20px", borderTop: "1px solid #e2e8f0", backgroundColor: "#fff", display: "flex", gap: "10px", alignItems: "center" }}>
               <button onClick={saveColumnChooser} style={{ backgroundColor: "#176b5b", color: "#fff", fontSize: "12px", fontWeight: "700", padding: "8px 24px", borderRadius: "3px" }}>Apply</button>
               <button className="secondary" onClick={() => setColumnChooserOpen(false)} style={{ background: "#fff", border: "1px solid #cbd5e1", color: "#1e293b", fontSize: "12px", fontWeight: "700", padding: "8px 24px", borderRadius: "3px" }}>Cancel</button>
-              <button type="button" style={{ background: "none", color: "#176b5b", fontSize: "12px", fontWeight: "600", marginLeft: "auto", cursor: "pointer" }} onClick={() => setDraftColumns(["company_name"])}>Remove All Columns</button>
+              <button type="button" style={{ background: "none", color: "#176b5b", fontSize: "12px", fontWeight: "600", marginLeft: "auto", cursor: "pointer" }} onClick={() => setDraftColumns([])}>Remove All Columns</button>
             </div>
           </div>
         </div>

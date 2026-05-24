@@ -54,19 +54,28 @@ export function GridFilterDropdown({ label, options, value, onChange, isMulti })
     };
   }, [isOpen]);
 
-  const selectedArray = Array.isArray(value) ? value : value ? [value] : [];
-  const filteredOptions = options.filter(opt => 
-    String(opt).toLowerCase().includes(search.toLowerCase())
+  const normalizedOptions = options.map((option) => {
+    if (option && typeof option === "object") {
+      return {
+        value: String(option.value ?? option.label ?? ""),
+        label: String(option.label ?? option.value ?? "")
+      };
+    }
+    return { value: String(option), label: String(option) };
+  });
+  const selectedArray = (Array.isArray(value) ? value : value ? [value] : []).map(String);
+  const filteredOptions = normalizedOptions.filter(opt =>
+    opt.label.toLowerCase().includes(search.toLowerCase())
   );
 
   const toggleOption = (opt) => {
     if (isMulti) {
-      const next = selectedArray.includes(opt)
-        ? selectedArray.filter(v => v !== opt)
-        : [...selectedArray, opt];
+      const next = selectedArray.includes(opt.value)
+        ? selectedArray.filter(v => v !== opt.value)
+        : [...selectedArray, opt.value];
       onChange(next);
     } else {
-      onChange(opt === value ? "" : opt);
+      onChange(opt.value === String(value) ? "" : opt.value);
       setIsOpen(false);
     }
   };
@@ -76,7 +85,7 @@ export function GridFilterDropdown({ label, options, value, onChange, isMulti })
     onChange(isMulti ? [] : "");
   };
 
-  const isSelected = (opt) => selectedArray.includes(opt);
+  const isSelected = (opt) => selectedArray.includes(opt.value);
 
   return (
     <div className="grid-filter-container" ref={containerRef}>
@@ -90,7 +99,7 @@ export function GridFilterDropdown({ label, options, value, onChange, isMulti })
               position: 'fixed',
               top: rect.bottom + 4 + 'px',
               left: rect.left + 'px',
-              width: '220px',
+              width: '180px',
               zIndex: 999999,
               background: '#fff',
               border: '1px solid #e2e8f0',
@@ -128,12 +137,12 @@ export function GridFilterDropdown({ label, options, value, onChange, isMulti })
           <div className="premium-list">
             {isMulti && (
                <div className="premium-item select-all" onClick={() => {
-                  if (selectedArray.length === options.length) onChange([]);
-                  else onChange(options);
+                  if (selectedArray.length === normalizedOptions.length) onChange([]);
+                  else onChange(normalizedOptions.map((option) => option.value));
                }}>
                  <span className="premium-item-label">Select All</span>
-                 <div className={`premium-checkbox ${options.length > 0 && selectedArray.length === options.length ? "checked" : ""}`}>
-                   {options.length > 0 && selectedArray.length === options.length && <Check size={13} />}
+                 <div className={`premium-checkbox ${normalizedOptions.length > 0 && selectedArray.length === normalizedOptions.length ? "checked" : ""}`}>
+                   {normalizedOptions.length > 0 && selectedArray.length === normalizedOptions.length && <Check size={13} />}
                  </div>
                </div>
             )}
@@ -144,8 +153,8 @@ export function GridFilterDropdown({ label, options, value, onChange, isMulti })
 
             {filteredOptions.map((opt, i) => {
               return (
-                <div key={i} className={`premium-item ${isSelected(opt) ? "selected" : ""}`} onClick={() => toggleOption(opt)}>
-                  <span className="premium-item-label">{opt}</span>
+                <div key={`${opt.value}-${i}`} className={`premium-item ${isSelected(opt) ? "selected" : ""}`} onClick={() => toggleOption(opt)}>
+                  <span className="premium-item-label">{opt.label}</span>
                   <div className={`premium-checkbox ${isSelected(opt) ? "checked" : ""}`}>
                     {isSelected(opt) && <Check size={13} />}
                   </div>
@@ -201,7 +210,7 @@ export function GridFilterDropdown({ label, options, value, onChange, isMulti })
           color: #94a3b8;
         }
         .grid-dropdown {
-          width: 220px;
+          width: 180px;
           z-index: 9999;
           box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
         }

@@ -157,6 +157,7 @@ class LeadManage(Base, TimestampMixin):
     assigned_to_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     assigned_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     status: Mapped[str | None] = mapped_column(Text)
+    is_inquiry: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
     follow_up_reminder_date: Mapped[datetime | None] = mapped_column(DateTime)
     follow_up_date: Mapped[datetime | None] = mapped_column(DateTime)
 

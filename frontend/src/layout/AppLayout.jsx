@@ -12,6 +12,7 @@ import { RolesPage } from "../pages/RolesPage";
 import { UsersPage } from "../pages/UsersPage";
 import { MyLeadsPage } from "../pages/MyLeadsPage";
 import { FollowUpsPage } from "../pages/FollowUpsPage";
+import { InquiriesPage } from "../pages/InquiriesPage";
 
 const pageMap = {
   dashboard: DashboardPage,
@@ -24,6 +25,7 @@ const pageMap = {
   "assign-leads": AssignLeadsPage,
   "my-leads": MyLeadsPage,
   "today-followup": FollowUpsPage,
+  inquiries: InquiriesPage,
 };
 
 export function AppLayout({ page, setPage }) {

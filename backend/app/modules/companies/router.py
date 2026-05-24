@@ -41,8 +41,10 @@ def list_my_leads(
     from app.models import LeadManage
     import traceback
     try:
-        print(f"DEBUG: Fetching leads for user {user.id} ({user.name})")
-        query = db.query(Company).join(LeadManage, Company.id == LeadManage.company_id).filter(LeadManage.assigned_to_id == user.id)
+        query = db.query(Company).join(LeadManage, Company.id == LeadManage.company_id).filter(
+            LeadManage.assigned_to_id == user.id,
+            LeadManage.is_inquiry != True
+        )
         if q:
             term = f"%{q.strip()}%"
             query = query.filter(Company.company_name.ilike(term))

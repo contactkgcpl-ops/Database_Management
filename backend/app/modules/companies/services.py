@@ -18,7 +18,10 @@ def company_query(db: Session):
     )
 
 def list_companies(db: Session, q: str | None = None) -> list[Company]:
-    query = company_query(db).order_by(Company.id.desc())
+    from app.models import LeadManage
+    query = company_query(db).outerjoin(LeadManage, Company.id == LeadManage.company_id).filter(
+        or_(LeadManage.is_inquiry.is_(False), LeadManage.is_inquiry.is_(None))
+    ).order_by(Company.id.desc())
     if q:
         term = f"%{q.strip()}%"
         query = query.filter(Company.company_name.ilike(term))
@@ -127,7 +130,7 @@ def assign_company(db: Session, company: Company, user_id: int | None, assigned_
         assignment = LeadManage(company_id=company.id)
         db.add(assignment)
     
-    if user_id is not None and assignment.assigned_to_id != user_id:
+    if assignment.assigned_to_id != user_id:
         assignment.assigned_to_id = user_id
         if assigned_by_id:
             assignment.assigned_by_id = assigned_by_id
@@ -222,6 +225,8 @@ def to_company_out(db: Session, company: Company, for_user_id: int | None = None
     assigned_by = assignment.assigned_by_id if assignment else None
     assigned_by_name = assignment.assigned_by.name if assignment and assignment.assigned_by else None
 
+    is_inquiry = assignment.is_inquiry if assignment else False
+
     # Fetch dynamic columns from lead_manage if exists
     if assignment:
         raw_lead_row = db.execute(text("SELECT * FROM lead_manage WHERE id = :id"), {"id": assignment.id}).mappings().first()
@@ -240,6 +245,47 @@ def to_company_out(db: Session, company: Company, for_user_id: int | None = None
                             "field_key": key,
                         })
 
+    # Aggregate connected_source from history dynamically
+    conn_src_pv = next((pv for pv in property_values if pv["field_key"] == "connected_source"), None)
+    
+    from app.models import LeadHistory
+    history_connected_sources = db.query(LeadHistory.old_value, LeadHistory.new_value).filter(
+        LeadHistory.company_id == company.id,
+        LeadHistory.property_key == "connected_source"
+    ).all()
+    
+    unique_vals = set()
+    if conn_src_pv and conn_src_pv["value"]:
+        for v in conn_src_pv["value"].split(","):
+            s = v.strip()
+            if s: unique_vals.add(s)
+            
+    for old_val, new_val in history_connected_sources:
+        if old_val:
+            for v in old_val.split(","):
+                s = v.strip()
+                if s: unique_vals.add(s)
+        if new_val:
+            for v in new_val.split(","):
+                s = v.strip()
+                if s: unique_vals.add(s)
+                
+    aggregated_val = ",".join(sorted(list(unique_vals)))
+    if aggregated_val:
+        if conn_src_pv:
+            conn_src_pv["value"] = aggregated_val
+        else:
+            lead_prop_id_map = {p.field_key: p.id for p in db.query(Property.id, Property.field_key).filter(Property.is_active == True, Property.entity_type == "lead").all()}
+            property_values.append({
+                "id": 0,
+                "property_id": lead_prop_id_map.get("connected_source", 0),
+                "value": aggregated_val,
+                "property_name": "Connected Source",
+                "field_key": "connected_source",
+            })
+
+    history_keys = [r[0] for r in db.query(LeadHistory.property_key).filter(LeadHistory.company_id == company.id).distinct().all()]
+
     return CompanyOut.model_validate(company).model_copy(
         update={
             "created_by_name": company.creator.name if company.creator else None,
@@ -248,6 +294,8 @@ def to_company_out(db: Session, company: Company, for_user_id: int | None = None
             "assigned_by": assigned_by,
             "assigned_by_name": assigned_by_name,
             "property_values": property_values,
+            "history_keys": history_keys,
+            "is_inquiry": is_inquiry,
         }
     )
 
@@ -335,4 +383,3 @@ def update_property_inline(db: Session, company_id: int, payload: InlineProperty
 
 def get_lead_history(db: Session, company_id: int) -> list[LeadHistory]:
     return db.query(LeadHistory).options(joinedload(LeadHistory.user)).filter(LeadHistory.company_id == company_id).order_by(LeadHistory.created_at.desc()).all()
-

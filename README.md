@@ -132,7 +132,7 @@ apt install -y git nginx python3-venv python3-pip nodejs npm mysql-server certbo
 4. Clone project:
 
 ```bash
-git clone YOUR_REPO_URL /var/www/data-management
+git clone https://github.com/contactkgcpl-ops/Database_Management.git /var/www/data-management
 cd /var/www/data-management
 ```
 
@@ -257,3 +257,126 @@ cd C:\Salvin\Data-Management\frontend npm run dev
 url: http://localhost:5173/
 db - http://127.0.0.1:8081/
 http://127.0.0.1:8000/api/health
+
+
+
+
+
+--------------------------------------------------------------
+
+ssh root@YOUR_VPS_IP
+
+apt update && apt upgrade -y
+apt install -y git nginx mysql-server python3-venv python3-pip curl certbot python3-certbot-nginx
+
+curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
+apt install -y nodejs
+node -v
+npm -v
+
+mkdir -p /var/www
+cd /var/www
+git clone YOUR_REPO_URL data-management
+cd /var/www/data-management
+
+mysql
+
+CREATE DATABASE salvin_database_management CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+CREATE USER 'salvin_user'@'localhost' IDENTIFIED BY 'salvin@db';
+GRANT ALL PRIVILEGES ON salvin_database_management.* TO 'salvin_user'@'localhost';
+FLUSH PRIVILEGES;
+EXIT;
+
+CREATE USER 'salvin_user'@'localhost' IDENTIFIED BY 'salvin@db';
+ALTER USER 'salvin_user'@'localhost' IDENTIFIED BY 'salvin@db';
+GRANT ALL PRIVILEGES ON salvin_database_management.* TO 'salvin_user'@'localhost';
+FLUSH PRIVILEGES;
+
+cd /var/www/data-management/backend
+cp .env.example .env
+nano .env
+
+DATABASE_URL=mysql+pymysql://salvin_user:salvin@db@localhost:3306/salvin_database_management
+JWT_SECRET=CHANGE_LONG_RANDOM_SECRET_64_CHARS
+ACCESS_TOKEN_EXPIRE_MINUTES=480
+
+DATABASE_URL=mysql+pymysql://salvin_user:salvin%40db@localhost:3306/salvin_database_management
+JWT_SECRET=7acff6c88257eb96a966421e59ad9f8d6fbb432b36aae34e4c972cc5bde39522
+ACCESS_TOKEN_EXPIRE_MINUTES=480
+BACKEND_CORS_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+
+cd /var/www/data-management/frontend
+cp .env.example .env
+nano .env
+
+VITE_API_URL=http://app.kgcpl.com/api
+VITE_APP_URL=http://app.kgcpl.com
+npm run build
+
+nano /etc/nginx/sites-available/data_management
+
+server {
+    listen 80;
+    server_name app.kgcpl.com www.app.kgcpl.com;
+
+    root /var/www/data-management/frontend/dist;
+    index index.html;
+
+    client_max_body_size 50M;
+
+    location / {
+        try_files $uri /index.html;
+    }
+
+    location /api/ {
+        proxy_pass http://127.0.0.1:8000/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /uploads/ {
+        proxy_pass http://127.0.0.1:8000/uploads/;
+        proxy_set_header Host $host;
+    }
+}
+
+nano /etc/nginx/sites-available/data_management
+ln -s /etc/nginx/sites-available/data_management /etc/nginx/sites-enabled/
+enable data_management config
+
+
+nslookup app.kgcpl.com
+
+nginx -t
+systemctl restart nginx
+
+
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+
+nano /etc/systemd/system/data-management-backend.service
+[Unit]
+Description=Data Management CRM Backend
+After=network.target mysql.service
+
+[Service]
+User=root
+WorkingDirectory=/var/www/data-management/backend
+Environment="PATH=/var/www/data-management/backend/.venv/bin"
+ExecStart=/var/www/data-management/backend/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+
+
+systemctl daemon-reload
+systemctl enable data-management-backend
+systemctl start data-management-backend
+systemctl status data-management-backend

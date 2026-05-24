@@ -421,6 +421,20 @@ def cleanup_duplicate_company_name_property(db: Session) -> None:
     db.execute(text("DELETE FROM properties WHERE field_key = 'company_name'"))
     db.commit()
 
+def migrate_lead_manage_inquiry_field(db: Session) -> None:
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    if "lead_manage" not in tables:
+        return
+    columns = {column["name"] for column in inspector.get_columns("lead_manage")}
+    if "is_inquiry" not in columns:
+        dialect = engine.dialect.name
+        if dialect == "mysql":
+            db.execute(text("ALTER TABLE lead_manage ADD COLUMN is_inquiry BOOL NOT NULL DEFAULT 0"))
+        else:
+            db.execute(text("ALTER TABLE lead_manage ADD COLUMN is_inquiry BOOLEAN NOT NULL DEFAULT 0"))
+        db.commit()
+
 def migrate_all(db: Session) -> None:
     # 1. First, update the 'properties' table schema so ORM queries don't fail
     migrate_property_filter_type(db)
@@ -438,3 +452,4 @@ def migrate_all(db: Session) -> None:
     migrate_user_hierarchy_profile_fields(db)
     migrate_drop_eav_unique_constraint(db)
     cleanup_duplicate_company_name_property(db)
+    migrate_lead_manage_inquiry_field(db)

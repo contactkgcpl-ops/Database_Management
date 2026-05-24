@@ -9,6 +9,10 @@ const emptyForm = {
   property_values: [],
 };
 
+function isMultiSelectProperty(property) {
+  return property?.object_type === "multiselect";
+}
+
 export function AddCompanyPage({ onBack, editingId }) {
   const notify = useNotify();
   const [loading, setLoading] = useState(false);
@@ -151,7 +155,7 @@ export function AddCompanyPage({ onBack, editingId }) {
             return (
               <div key={prop.id}>
                 <label className="field-label">{prop.name} {prop.is_required && "*"}</label>
-                {prop.object_type === "multiselect" ? (
+                {isMultiSelectProperty(prop) ? (
                   <MultiSelect
                     options={prop.options?.map(o => ({ value: o.value, label: o.label })) || []}
                     value={val ? val.split(",") : []}

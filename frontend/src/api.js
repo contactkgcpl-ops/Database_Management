@@ -101,5 +101,11 @@ export const api = {
   updateCompanyInline: (companyId, payload) => request(`/companies/${companyId}/inline-update`, { method: "PUT", body: JSON.stringify(payload) }),
   getCompanyHistory: (companyId) => request(`/companies/${companyId}/history`),
   myPendingFollowups: () => request("/leads/followups/my-pending"),
+  getCompanyFollowups: (companyId) => request(`/leads/companies/${companyId}/followups`),
   completeFollowup: (id, payload) => request(`/leads/followups/${id}/complete`, { method: "PUT", body: JSON.stringify(payload) }),
+  getInquiries: (q = "") => request(`/inquiries${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  createInquiry: (data) => request("/inquiries", { method: "POST", body: JSON.stringify(data) }),
+  assignInquiry: (id, userId) => request(`/inquiries/${id}/assign`, { method: "PUT", body: JSON.stringify({ user_id: userId ? Number(userId) : null }) }),
+  updateInquiryStage: (id, payload) => request(`/inquiries/${id}/stage`, { method: "PUT", body: JSON.stringify(payload) }),
+  convertLeadToInquiry: (companyId, payload) => request(`/leads/${companyId}/convert`, { method: "POST", body: JSON.stringify(payload) }),
 };

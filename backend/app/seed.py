@@ -18,6 +18,12 @@ DEFAULT_PERMISSIONS = [
     ("leads.assign", "Assign Leads", "contact", "Contact", 50),
     ("leads.my", "My Leads", "contact", "Contact", 55),
     ("leads.followup", "Today Followup", "contact", "Contact", 60),
+    ("inquiry.view", "View Inquiries", "contact", "Contact", 70),
+    ("inquiry.create", "Create Inquiry", "contact", "Contact", 71),
+    ("inquiry.update", "Update Inquiry", "contact", "Contact", 72),
+    ("inquiry.convert", "Convert Lead To Inquiry", "contact", "Contact", 73),
+    ("inquiry.assign", "Assign Inquiry", "contact", "Contact", 74),
+    ("inquiry.pipeline", "Update Inquiry Pipeline", "contact", "Contact", 75),
 ]
 
 DEFAULT_PROPERTIES = [
@@ -31,12 +37,19 @@ DEFAULT_PROPERTIES = [
     ("Website", "website", "text", "custom", "Website", False, False, False, "company", "text", True, 50, 0),
     ("Description", "description", "textarea", "custom", "", False, False, False, "company", "text", True, 60, 0),
     ("Cold Leads Status", "status", "dropdown", "custom", "", False, False, False, "lead", "dropdown", True, 2, 0),
-    ("Connected Source", "connected_source", "dropdown", "custom", "Lead connected source", False, False, False, "lead", "dropdown", True, 3, 0),
+    ("Connected Source", "connected_source", "multiselect", "custom", "Lead connected source", False, False, False, "lead", "multiselect", True, 3, 0),
+    ("Inquiry No", "inquiry_no", "text", "custom", "Inquiry Number", False, False, False, "lead", "text", True, 10, 0),
+    ("Contact Person", "contact_person", "text", "custom", "Contact Person Name", False, False, False, "lead", "text", True, 11, 0),
+    ("Product / Service", "product_service", "text", "custom", "Product or Service Name", False, False, False, "lead", "text", True, 12, 0),
+    ("Inquiry Source", "inquiry_source", "dropdown", "custom", "Source of Inquiry", False, False, False, "lead", "dropdown", True, 13, 0),
+    ("Order Amount", "order_amount", "number", "custom", "Order Amount", False, False, False, "lead", "number", True, 14, 0),
+    ("Requirement", "requirement", "text", "custom", "Lead/Inquiry requirement details", False, False, False, "lead", "text", True, 15, 0),
 ]
 DEFAULT_GRIDS = [
     ("companies", "Companies", True, 10),
     ("assign_leads", "Assign Leads", True, 20),
     ("my_leads", "My Leads", True, 30),
+    ("inquiries", "Inquiries", True, 40),
 ]
 
 DEFAULT_PROPERTY_OPTIONS = {
@@ -44,14 +57,29 @@ DEFAULT_PROPERTY_OPTIONS = {
         ("New", "new", 0),
         ("Connected", "connected", 10),
         ("Not Connected", "not_connected", 20),
-        ("Follow Up", "follow_up", 30),
-        ("Converted", "converted", 40),
-        ("Not Interested", "not_interested", 50),
+        ("Converted", "converted", 25),
+        ("Follow-up", "follow_up", 30),
+        ("Quotation Sent", "quotation_sent", 40),
+        ("Negotiation", "negotiation", 50),
+        ("Converted to Order", "converted_to_order", 60),
+        ("Invoice Sent", "invoice_sent", 70),
+        ("Payment Received", "payment_received", 80),
+        ("Dispatched", "dispatched", 90),
+        ("Completed", "completed", 100),
+        ("Lost", "lost", 110),
+        ("Not Interested", "not_interested", 120),
     ],
     "connected_source": [
         ("Call", "call", 0),
         ("Email", "email", 10),
         ("Whatsapp", "whatsapp", 20),
+    ],
+    "inquiry_source": [
+        ("Website", "website", 0),
+        ("Referral", "referral", 10),
+        ("Trade Show", "trade_show", 20),
+        ("Existing Customer", "existing_customer", 30),
+        ("Social Media", "social_media", 40),
     ],
 }
 
@@ -108,12 +136,7 @@ def seed_property_grids(db: Session, prop: Property) -> None:
     if not prop.show_on_grid:
         return
 
-    grid_keys = ["assign_leads", "my_leads"] if prop.entity_type == "lead" else ["companies"]
-    if prop.field_key == "connected_source":
-        grid_keys = ["assign_leads"]
-        my_leads_grid = db.query(DisplayGrid).filter(DisplayGrid.key == "my_leads").first()
-        if my_leads_grid:
-            prop.grids[:] = [item for item in prop.grids if item.grid_id != my_leads_grid.id]
+    grid_keys = ["assign_leads", "my_leads", "inquiries"] if prop.entity_type == "lead" else ["companies", "inquiries"]
     grids = db.query(DisplayGrid).filter(DisplayGrid.key.in_(grid_keys), DisplayGrid.is_active.is_(True)).all()
     existing_grid_ids = {item.grid_id for item in prop.grids}
     for grid in grids:

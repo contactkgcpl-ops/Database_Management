@@ -3,7 +3,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import require_permission
+from app.deps import require_any_permission, require_permission
 from app.models import User
 from app.modules.properties.services import (
     DuplicatePropertyKeyError,
@@ -22,12 +22,22 @@ from app.schemas import DisplayGridOut, PropertyCreate, PropertyGridColumnBulkUp
 
 router = APIRouter(prefix="/properties", tags=["properties"])
 
+PROPERTY_READ_PERMISSIONS = [
+    "properties.view",
+    "companies.view",
+    "companies.manage",
+    "leads.add",
+    "leads.assign",
+    "leads.my",
+    "leads.followup",
+]
+
 
 @router.get("", response_model=list[PropertyOut])
 def list_property_records(
     q: str | None = None,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("properties.view")),
+    _: User = Depends(require_any_permission(PROPERTY_READ_PERMISSIONS)),
 ):
     return [to_property_out(prop) for prop in list_properties(db, q)]
 
@@ -35,7 +45,7 @@ def list_property_records(
 @router.get("/grids", response_model=list[DisplayGridOut])
 def list_property_grids(
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("properties.view")),
+    _: User = Depends(require_any_permission(PROPERTY_READ_PERMISSIONS)),
 ):
     return [to_display_grid_out(grid) for grid in list_display_grids(db)]
 
@@ -44,7 +54,7 @@ def list_property_grids(
 def get_property_record(
     property_id: int,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("properties.view")),
+    _: User = Depends(require_any_permission(PROPERTY_READ_PERMISSIONS)),
 ):
     prop = get_property(db, property_id)
     if not prop:

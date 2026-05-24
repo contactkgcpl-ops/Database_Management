@@ -182,6 +182,7 @@ class CompanyUpdate(CompanyBase):
 class CompanyOut(CompanyBase):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    created_at: datetime | None = None
     created_by: int | None = None
     created_by_name: str | None = None
     assigned_to: int | None = None
@@ -189,6 +190,8 @@ class CompanyOut(CompanyBase):
     assigned_by: int | None = None
     assigned_by_name: str | None = None
     property_values: list[CompanyPropertyValueOut] = []
+    history_keys: list[str] = []
+    is_inquiry: bool | None = False
 
 
 class LeadPropertyValueOut(BaseModel):
@@ -221,6 +224,12 @@ class InlinePropertyUpdate(BaseModel):
     follow_up_date: str | None = None
 
 
+class LeadConvertIn(BaseModel):
+    follow_up_date: str
+    remark: str | None = None
+    requirement: str | None = None
+
+
 from datetime import datetime
 
 class LeadHistoryOut(BaseModel):
@@ -244,6 +253,7 @@ class LeadFollowUpOut(BaseModel):
     contact_number: str | None = None
     lead_status: str | None = None
     assigned_to_id: int | None = None
+    assigned_to_name: str | None = None
     scheduled_date: datetime
     actual_date: datetime | None = None
     status: str

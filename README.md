@@ -380,3 +380,61 @@ systemctl daemon-reload
 systemctl enable data-management-backend
 systemctl start data-management-backend
 systemctl status data-management-backend
+
+
+
+
+To push your latest changes to live VPS:
+
+1. Local: commit + push
+On your PC:
+
+cd C:\Salvin\Data-Management
+git status
+git add .
+git commit -m "Update CRM"
+git push
+If .env, node_modules, dist, DB files show in git status, do not commit them.
+
+2. VPS: pull latest code
+SSH to server:
+
+ssh root@72.60.108.5
+Then:
+
+cd /var/www/salvin-data-management
+git pull
+3. Backend update
+
+cd /var/www/salvin-data-management/backend
+source .venv/bin/activate
+pip install -r requirements.txt
+python -c "from app.db import Base, engine, SessionLocal; from app.core.schema_migrations import migrate_all; from app.seed import seed_defaults; Base.metadata.create_all(bind=engine); db=SessionLocal(); migrate_all(db); seed_defaults(db); db.close(); print('backend updated')"
+systemctl restart salvin-data-management-backend
+Check:
+
+curl http://127.0.0.1:8001/api/health
+4. Frontend update
+
+cd /var/www/salvin-data-management/frontend
+npm install
+npm run build
+systemctl restart nginx
+5. Test live
+If using IP:
+
+http://72.60.108.5
+If domain working:
+
+https://yourdomain.com
+Hard refresh browser:
+
+CTRL + F5
+If anything fails
+Backend logs:
+
+journalctl -u salvin-data-management-backend -n 100 --no-pager
+Nginx check:
+
+nginx -t
+systemctl status nginx

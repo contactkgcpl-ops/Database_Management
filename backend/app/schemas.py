@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
 
@@ -229,8 +231,6 @@ class LeadConvertIn(BaseModel):
     remark: str | None = None
     requirement: str | None = None
 
-
-from datetime import datetime
 
 class LeadHistoryOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)

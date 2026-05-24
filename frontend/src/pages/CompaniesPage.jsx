@@ -247,25 +247,39 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleCompanies.map((c) => (
-                    <tr key={c.id}>
-                      {gridProperties.map((p) => (
-                        <td key={p.field_key}>
-                          <span className="cell-text" title={getCompanyPropertyValue(c, p)}>
-                            {p.field_key === "company_name" ? <strong>{getCompanyPropertyValue(c, p)}</strong> : getCompanyPropertyValue(c, p)}
-                          </span>
-                        </td>
-                      ))}
-                      {canManage && (
-                        <td>
-                          <div className="row-actions">
-                            <button type="button" className="secondary icon-only" onClick={() => edit(c)}><Pencil size={16} /></button>
-                            <button type="button" className="danger icon-only" onClick={() => remove(c)}><Trash2 size={16} /></button>
-                          </div>
-                        </td>
-                      )}
-                    </tr>
-                  ))}
+                  {visibleCompanies.map((c) => {
+                    const statusVal = c.property_values?.find(pv => pv.field_key === "status")?.value || "";
+                    const isInquiry = c.is_inquiry;
+
+                    let rowClassName = "";
+                    if (isInquiry) {
+                      const isOrderPlaced = statusVal === "converted_to_order" || statusVal === "completed";
+
+                      if (isOrderPlaced) {
+                        rowClassName = "order-placed-row";
+                      }
+                    }
+
+                    return (
+                      <tr key={c.id} className={rowClassName}>
+                        {gridProperties.map((p) => (
+                          <td key={p.field_key}>
+                            <span className="cell-text" title={getCompanyPropertyValue(c, p)}>
+                              {p.field_key === "company_name" ? <strong>{getCompanyPropertyValue(c, p)}</strong> : getCompanyPropertyValue(c, p)}
+                            </span>
+                          </td>
+                        ))}
+                        {canManage && (
+                          <td>
+                            <div className="row-actions">
+                              <button type="button" className="secondary icon-only" onClick={() => edit(c)}><Pencil size={16} /></button>
+                              <button type="button" className="danger icon-only" onClick={() => remove(c)}><Trash2 size={16} /></button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

@@ -99,7 +99,7 @@ def get_my_pending_followups(
     ).filter(
         LeadFollowUp.assigned_to_id == user.id,
         LeadFollowUp.status.in_(["Pending", "Re Follow Up"]),
-        LeadManage.status == "follow_up"
+        LeadManage.is_inquiry.isnot(True)
     ).order_by(LeadFollowUp.scheduled_date.asc()).all()
     return [followup_to_out(db, followup) for followup in followups]
 

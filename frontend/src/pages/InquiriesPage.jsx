@@ -14,7 +14,6 @@ const columns = [
   { key: "company_name", label: "Customer Name", width: 200 },
   { key: "contact_person", label: "Contact Person", width: 140 },
   { key: "quick_connect", label: "Mobile / Email", width: 150 },
-  { key: "product_service", label: "Product / Service", width: 160 },
   { key: "requirement", label: "Requirement", width: 180 },
   { key: "inquiry_source", label: "Source", width: 120 },
   { key: "assigned_to", label: "Assigned To", width: 140 },
@@ -98,7 +97,7 @@ export function InquiriesPage() {
     address: "",
     state: "",
     contact_person: "",
-    product_service: "",
+    requirement: "",
     inquiry_source: "",
     assigned_to: ""
   });
@@ -168,7 +167,7 @@ export function InquiriesPage() {
     addProp("address", addForm.address);
     addProp("state", addForm.state);
     addProp("contact_person", addForm.contact_person);
-    addProp("product_service", addForm.product_service);
+    addProp("requirement", addForm.requirement);
     addProp("inquiry_source", addForm.inquiry_source);
 
     try {
@@ -187,7 +186,7 @@ export function InquiriesPage() {
         address: "",
         state: "",
         contact_person: "",
-        product_service: "",
+        requirement: "",
         inquiry_source: "",
         assigned_to: ""
       });
@@ -615,11 +614,16 @@ export function InquiriesPage() {
                       visibleInquiries.map((inq) => {
                         const inqNo = getPropValue(inq, "inquiry_no");
                         const statusVal = getPropValue(inq, "status") || "new";
-                        const isConverted = statusVal === "converted_to_order";
+                        const isConverted = statusVal === "converted_to_order" || statusVal === "completed";
                         const orderAmt = getPropValue(inq, "order_amount");
 
+                        let rowClassName = "";
+                        if (isConverted) {
+                          rowClassName = "order-placed-row";
+                        }
+
                         return (
-                          <tr key={inq.id}>
+                          <tr key={inq.id} className={rowClassName}>
                             <td>
                               <span className="cell-text"><strong>{inqNo || `INQ-${inq.id}`}</strong></span>
                               <span className="cell-subtext" style={{ fontSize: "10px", color: "#94a3b8" }}>Co. ID: {inq.id}</span>
@@ -651,9 +655,6 @@ export function InquiriesPage() {
                                   />
                                 );
                               })()}
-                            </td>
-                            <td>
-                              <span className="cell-text">{getPropValue(inq, "product_service") || "-"}</span>
                             </td>
                             <td>
                               <span className="cell-text">{getPropValue(inq, "requirement") || "-"}</span>
@@ -796,8 +797,8 @@ export function InquiriesPage() {
                   <input value={addForm.contact_person} onChange={e => setAddForm({ ...addForm, contact_person: e.target.value })} style={{ width: "100%", padding: "8px", border: "1px solid #cbd5e1", borderRadius: "6px", boxSizing: "border-box" }} placeholder="Amit Kumar" />
                 </div>
                 <div>
-                  <label style={{ display: "block", fontSize: "12px", fontWeight: "700", marginBottom: "4px", color: "#334155" }}>Product / Service Required</label>
-                  <input value={addForm.product_service} onChange={e => setAddForm({ ...addForm, product_service: e.target.value })} style={{ width: "100%", padding: "8px", border: "1px solid #cbd5e1", borderRadius: "6px", boxSizing: "border-box" }} placeholder="Hydraulic Pump / CNC Drilling" />
+                  <label style={{ display: "block", fontSize: "12px", fontWeight: "700", marginBottom: "4px", color: "#334155" }}>Requirement</label>
+                  <input value={addForm.requirement} onChange={e => setAddForm({ ...addForm, requirement: e.target.value })} style={{ width: "100%", padding: "8px", border: "1px solid #cbd5e1", borderRadius: "6px", boxSizing: "border-box" }} placeholder="Enter customer requirements" />
                 </div>
                 <div>
                   <label style={{ display: "block", fontSize: "12px", fontWeight: "700", marginBottom: "4px", color: "#334155" }}>Inquiry Source</label>

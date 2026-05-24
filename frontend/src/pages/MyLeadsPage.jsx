@@ -457,8 +457,18 @@ export function MyLeadsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleLeads.map((lead) => (
-                    <tr key={lead.id}>
+                  {visibleLeads.map((lead) => {
+                    const statusVal = lead.property_values?.find(pv => pv.field_key === "status")?.value || "";
+                    const isInquiry = lead.is_inquiry;
+                    let rowClassName = "";
+                    if (isInquiry) {
+                      const isOrderPlaced = statusVal === "converted_to_order" || statusVal === "completed";
+                      if (isOrderPlaced) {
+                        rowClassName = "order-placed-row";
+                      }
+                    }
+                    return (
+                      <tr key={lead.id} className={rowClassName}>
                       {bulkMode && (
                         <td className="bulk-select-col">
                           <input
@@ -556,7 +566,8 @@ export function MyLeadsPage() {
                         </td>
                       ))}
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

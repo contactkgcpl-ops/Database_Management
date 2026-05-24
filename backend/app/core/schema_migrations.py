@@ -421,6 +421,49 @@ def cleanup_duplicate_company_name_property(db: Session) -> None:
     db.execute(text("DELETE FROM properties WHERE field_key = 'company_name'"))
     db.commit()
 
+def consolidate_product_to_requirement(db: Session) -> None:
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    if "lead_manage" not in tables:
+        return
+    
+    columns = {column["name"] for column in inspector.get_columns("lead_manage")}
+    if "product_service" in columns:
+        dialect = engine.dialect.name
+        if dialect == "mysql":
+            db.execute(text("""
+                UPDATE lead_manage 
+                SET requirement = CASE 
+                    WHEN (requirement IS NULL OR requirement = '') THEN product_service 
+                    WHEN (product_service IS NULL OR product_service = '') THEN requirement 
+                    ELSE CONCAT(requirement, ' (Product/Service: ', product_service, ')') 
+                END 
+                WHERE product_service IS NOT NULL AND product_service != ''
+            """))
+        else:
+            db.execute(text("""
+                UPDATE lead_manage 
+                SET requirement = CASE 
+                    WHEN (requirement IS NULL OR requirement = '') THEN product_service 
+                    WHEN (product_service IS NULL OR product_service = '') THEN requirement 
+                    ELSE requirement || ' (Product/Service: ' || product_service || ')' 
+                END 
+                WHERE product_service IS NOT NULL AND product_service != ''
+            """))
+        db.commit()
+        
+        db.execute(text("DELETE FROM property_grids WHERE property_id IN (SELECT id FROM properties WHERE field_key = 'product_service')"))
+        db.execute(text("DELETE FROM company_property_values WHERE property_id IN (SELECT id FROM properties WHERE field_key = 'product_service')"))
+        db.execute(text("DELETE FROM properties WHERE field_key = 'product_service'"))
+        db.commit()
+        
+        if dialect == "mysql":
+            try:
+                db.execute(text("ALTER TABLE lead_manage DROP COLUMN product_service"))
+                db.commit()
+            except Exception as e:
+                print(f"Error dropping product_service column: {e}")
+
 def migrate_lead_manage_inquiry_field(db: Session) -> None:
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
@@ -453,3 +496,4 @@ def migrate_all(db: Session) -> None:
     migrate_drop_eav_unique_constraint(db)
     cleanup_duplicate_company_name_property(db)
     migrate_lead_manage_inquiry_field(db)
+    consolidate_product_to_requirement(db)

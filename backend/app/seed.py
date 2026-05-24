@@ -40,7 +40,6 @@ DEFAULT_PROPERTIES = [
     ("Connected Source", "connected_source", "multiselect", "custom", "Lead connected source", False, False, False, "lead", "multiselect", True, 3, 0),
     ("Inquiry No", "inquiry_no", "text", "custom", "Inquiry Number", False, False, False, "lead", "text", True, 10, 0),
     ("Contact Person", "contact_person", "text", "custom", "Contact Person Name", False, False, False, "lead", "text", True, 11, 0),
-    ("Product / Service", "product_service", "text", "custom", "Product or Service Name", False, False, False, "lead", "text", True, 12, 0),
     ("Inquiry Source", "inquiry_source", "dropdown", "custom", "Source of Inquiry", False, False, False, "lead", "dropdown", True, 13, 0),
     ("Order Amount", "order_amount", "number", "custom", "Order Amount", False, False, False, "lead", "number", True, 14, 0),
     ("Requirement", "requirement", "text", "custom", "Lead/Inquiry requirement details", False, False, False, "lead", "text", True, 15, 0),

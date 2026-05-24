@@ -489,8 +489,18 @@ export function AssignLeadsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {visibleData.map((c) => (
-                    <tr key={c.id}>
+                  {visibleData.map((c) => {
+                    const statusVal = c.property_values?.find(pv => pv.field_key === "status")?.value || "";
+                    const isInquiry = c.is_inquiry;
+                    let rowClassName = "";
+                    if (isInquiry) {
+                      const isOrderPlaced = statusVal === "converted_to_order" || statusVal === "completed";
+                      if (isOrderPlaced) {
+                        rowClassName = "order-placed-row";
+                      }
+                    }
+                    return (
+                      <tr key={c.id} className={rowClassName}>
                       {bulkMode && (
                         <td className="bulk-select-col">
                           <input
@@ -632,9 +642,10 @@ export function AssignLeadsPage() {
                             {c.assigned_by_name || "-"}
                           </span>
                         </td>
-                      </>)}
-                    </tr>
-                  ))}
+                        </>)}
+                     </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

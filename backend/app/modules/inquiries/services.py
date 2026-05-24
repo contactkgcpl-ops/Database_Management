@@ -107,7 +107,7 @@ def list_inquiries(db: Session, q: str | None, user: User):
                 Company.company_name.ilike(term),
                 literal_column("lead_manage.inquiry_no").ilike(term),
                 literal_column("lead_manage.contact_person").ilike(term),
-                literal_column("lead_manage.product_service").ilike(term),
+                literal_column("lead_manage.requirement").ilike(term),
                 literal_column("lead_manage.inquiry_source").ilike(term),
             )
         )

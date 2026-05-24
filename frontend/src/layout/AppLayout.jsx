@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Bell, ChevronsLeft, ChevronRight, LogOut, Mail, Sparkles } from "lucide-react";
+import { assetUrl } from "../api";
+import salvinLogo from "../assets/salvin_logo.png";
 import { flatNavigation, navigation } from "../config/navigation";
 import { useAuth } from "../context/AuthContext";
 import { AddCompanyPage } from "../pages/AddCompanyPage";
@@ -62,7 +64,13 @@ export function AppLayout({ page, setPage }) {
   return (
     <div className={`app ${navCollapsed ? "nav-collapsed" : ""}`}>
       <aside>
-        <div className="sidebar-brand">ERP</div>
+        <div className="sidebar-brand" style={{ display: "flex", alignItems: "center", justifyContent: navCollapsed ? "center" : "flex-start", padding: navCollapsed ? "0" : "0 18px", overflow: "hidden" }}>
+          {navCollapsed ? (
+            <span style={{ fontSize: "14px", fontWeight: "800", color: "#f5f8fb" }}>SI</span>
+          ) : (
+            <img src={salvinLogo} alt="Salvin Industries" style={{ height: "30px", maxWidth: "100%", objectFit: "contain" }} />
+          )}
+        </div>
         <nav className="sidebar-nav">
           {allowed.map((item) => {
             const Icon = item.icon;
@@ -111,14 +119,12 @@ export function AppLayout({ page, setPage }) {
         <header>
           <div className="page-chip">{pageLabel}</div>
           <div className="topbar-actions">
-            <button type="button" className="upgrade-button">
-              <Sparkles size={16} />
-              Upgrade plan
-            </button>
-            <button type="button" className="topbar-icon" aria-label="Messages"><Mail size={20} /></button>
-            <button type="button" className="topbar-icon notification-dot" aria-label="Notifications"><Bell size={20} /></button>
             <div className="user-chip">
-              <span className="avatar">{initials}</span>
+              {user.profile_image_url ? (
+                <img src={assetUrl(user.profile_image_url)} alt={user.name} className="avatar" style={{ objectFit: 'cover' }} />
+              ) : (
+                <span className="avatar">{initials}</span>
+              )}
               <strong>{user.name}</strong>
             </div>
           </div>

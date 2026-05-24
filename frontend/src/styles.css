@@ -3471,3 +3471,20 @@ form.compact-user-form .modal-actions button {
 .multi-select-field {
   position: relative;
 }
+
+/* Global table row highlight styles */
+.order-placed-row td {
+  background-color: #f0fdf4 !important;
+  color: #166534 !important;
+}
+.order-placed-row:hover td {
+  background-color: #dcfce7 !important;
+}
+
+.running-inquiry-row td {
+  background-color: #eff6ff !important;
+  color: #1e40af !important;
+}
+.running-inquiry-row:hover td {
+  background-color: #dbeafe !important;
+}

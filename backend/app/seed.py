@@ -28,6 +28,9 @@ DEFAULT_PERMISSIONS = [
     ("requirement.create", "Create Requirement", "requirements", "Requirements", 81),
     ("requirement.update", "Update Requirement", "requirements", "Requirements", 82),
     ("requirement.delete", "Delete Requirement", "requirements", "Requirements", 83),
+    ("time.view", "View My Time", "time", "Time Tracking", 90),
+    ("time.break", "Break Controls", "time", "Time Tracking", 91),
+    ("time.manage", "Manage User Time", "time", "Time Tracking", 92),
 ]
 
 DEFAULT_PROPERTIES = [

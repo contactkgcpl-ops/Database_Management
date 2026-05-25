@@ -259,3 +259,26 @@ class LeadFollowUpOut(BaseModel):
     status: str
     remark: str | None = None
     created_at: datetime
+
+
+class UserBreakLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    break_start: datetime
+    break_end: datetime | None = None
+    break_seconds: int = 0
+
+
+class UserTimeLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int
+    user_name: str | None = None
+    work_date: str
+    login_at: datetime
+    logout_at: datetime | None = None
+    total_break_seconds: int = 0
+    total_work_seconds: int = 0
+    status: str
+    active_break_start: datetime | None = None
+    breaks: list[UserBreakLogOut] = []

@@ -1,9 +1,11 @@
 from datetime import datetime
 import re
 
+from fastapi import HTTPException
 from sqlalchemy import literal_column, or_, text
 from sqlalchemy.orm import Session
 
+from app.deps import user_has_all_permissions
 from app.models import Company, CompanyPropertyValue, LeadFollowUp, LeadHistory, LeadManage, Property, User
 from app.modules.companies.services import get_company, to_company_out
 
@@ -98,8 +100,39 @@ def _create_followup(db: Session, assignment: LeadManage, follow_up_date: str | 
     )
 
 
+def _has_full_inquiry_access(user: User) -> bool:
+    return user_has_all_permissions(user, "users.manage", "roles.manage")
+
+
+def _visible_user_ids(db: Session, user: User) -> list[int]:
+    child_ids = [row.id for row in db.query(User.id).filter(User.parent_id == user.id).all()]
+    return [user.id, *child_ids]
+
+
+def _inquiry_visible_filter(db: Session, user: User):
+    user_ids = _visible_user_ids(db, user)
+    return or_(
+        LeadManage.assigned_to_id.in_(user_ids),
+        LeadManage.assigned_by_id == user.id,
+        Company.created_by == user.id,
+    )
+
+
+def _can_access_inquiry(db: Session, company: Company, assignment: LeadManage, user: User) -> bool:
+    if _has_full_inquiry_access(user):
+        return True
+    user_ids = set(_visible_user_ids(db, user))
+    return (
+        assignment.assigned_to_id in user_ids
+        or assignment.assigned_by_id == user.id
+        or company.created_by == user.id
+    )
+
+
 def list_inquiries(db: Session, q: str | None, user: User):
     query = db.query(Company).join(LeadManage, Company.id == LeadManage.company_id).filter(LeadManage.is_inquiry.is_(True))
+    if not _has_full_inquiry_access(user):
+        query = query.filter(_inquiry_visible_filter(db, user))
     if q:
         term = f"%{q.strip()}%"
         query = query.filter(
@@ -176,6 +209,8 @@ def assign_inquiry(db: Session, company_id: int, user_id: int | None, user: User
     assignment = db.query(LeadManage).filter(LeadManage.company_id == company_id).first()
     if not assignment or not assignment.is_inquiry:
         raise ValueError("Inquiry not found")
+    if not _can_access_inquiry(db, company, assignment, user):
+        raise HTTPException(status_code=403, detail="Inquiry is not assigned to you, assigned by you, or assigned to your child user.")
     old_value = str(assignment.assigned_to_id or "")
     assignment.assigned_to_id = user_id
     assignment.assigned_by_id = user.id
@@ -195,6 +230,8 @@ def update_stage(db: Session, company_id: int, payload, user: User) -> Company:
     assignment = db.query(LeadManage).filter(LeadManage.company_id == company_id).first()
     if not assignment or not assignment.is_inquiry:
         raise ValueError("Inquiry not found")
+    if not _can_access_inquiry(db, company, assignment, user):
+        raise HTTPException(status_code=403, detail="Inquiry is not assigned to you, assigned by you, or assigned to your child user.")
 
     props_by_id, props_by_key = _property_maps(db)
     old_status = assignment.status or ""

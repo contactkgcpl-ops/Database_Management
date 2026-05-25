@@ -74,6 +74,7 @@ async function download(path, filename) {
 export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   me: () => request("/auth/me"),
+  dashboardStats: () => request("/dashboard/stats"),
   users: () => request("/users"),
   createUser: (data) => request("/users", { method: "POST", body: requestBody(data) }),
   updateUser: (id, data) => request(`/users/${id}`, { method: "PUT", body: requestBody(data) }),
@@ -119,4 +120,10 @@ export const api = {
   myNotifications: () => request("/requirements/notifications"),
   markNotificationRead: (id) => request(`/requirements/notifications/${id}/read`, { method: "PUT" }),
   markAllNotificationsRead: () => request("/requirements/notifications/read-all", { method: "PUT" }),
+  todayTime: () => request("/time/today"),
+  myTimeLogs: (q = "") => request(`/time/my${q ? `?${q}` : ""}`),
+  userTimeLogs: (q = "") => request(`/time/users${q ? `?${q}` : ""}`),
+  markTimeLogout: () => request("/time/logout", { method: "POST" }),
+  startBreak: () => request("/time/break/start", { method: "POST" }),
+  endBreak: () => request("/time/break/end", { method: "POST" }),
 };

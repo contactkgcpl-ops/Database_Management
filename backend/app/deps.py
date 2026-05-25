@@ -18,6 +18,11 @@ def user_permission_codes(user: User) -> list[str]:
     return [rp.permission.code for rp in user.role.permissions]
 
 
+def user_has_all_permissions(user: User, *codes: str) -> bool:
+    permissions = set(user_permission_codes(user))
+    return all(code in permissions for code in codes)
+
+
 def current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)) -> User:
     email = decode_token(token)
     if not email:

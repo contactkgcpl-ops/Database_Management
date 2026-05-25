@@ -24,7 +24,12 @@ export function AuthProvider({ children }) {
     setUser(await api.me());
   };
 
-  const logout = () => {
+  const logout = async () => {
+    try {
+      await api.markTimeLogout();
+    } catch {
+      // Logout should still clear the local session if time close fails.
+    }
     tokenStore.clear();
     setUser(null);
   };

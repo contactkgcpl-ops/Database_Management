@@ -21,6 +21,7 @@ USER_LIST_PERMISSIONS = [
     "leads.assign",
     "leads.my",
     "leads.followup",
+    "time.manage",
 ]
 
 UPLOAD_DIR = Path("storage/uploads")

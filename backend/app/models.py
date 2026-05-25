@@ -1,6 +1,6 @@
-from datetime import datetime
+from datetime import date, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -244,3 +244,35 @@ class RequirementHistory(Base, TimestampMixin):
     requirement: Mapped[Requirement] = relationship(back_populates="history")
     user: Mapped[User | None] = relationship(foreign_keys=[user_id])
 
+
+class UserTimeLog(Base, TimestampMixin):
+    __tablename__ = "user_time_logs"
+    __table_args__ = (UniqueConstraint("user_id", "work_date", name="uq_user_time_log_day"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    work_date: Mapped[date] = mapped_column(Date, index=True)
+    login_at: Mapped[datetime] = mapped_column(DateTime)
+    logout_at: Mapped[datetime | None] = mapped_column(DateTime)
+    total_break_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    total_work_seconds: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(20), default="active")
+
+    user: Mapped[User] = relationship(foreign_keys=[user_id])
+    breaks: Mapped[list["UserBreakLog"]] = relationship(
+        cascade="all, delete-orphan", back_populates="time_log", order_by="UserBreakLog.break_start"
+    )
+
+
+class UserBreakLog(Base, TimestampMixin):
+    __tablename__ = "user_break_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    time_log_id: Mapped[int] = mapped_column(ForeignKey("user_time_logs.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    break_start: Mapped[datetime] = mapped_column(DateTime)
+    break_end: Mapped[datetime | None] = mapped_column(DateTime)
+    break_seconds: Mapped[int] = mapped_column(Integer, default=0)
+
+    time_log: Mapped[UserTimeLog] = relationship(back_populates="breaks")
+    user: Mapped[User] = relationship(foreign_keys=[user_id])

@@ -1,8 +1,10 @@
 from datetime import datetime
 
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from fastapi import HTTPException
+from app.deps import user_has_all_permissions
 from app.models import Requirement, RequirementNotification, RequirementHistory, User
 from app.modules.requirements.schemas import RequirementCreate, RequirementUpdate, RequirementCommentCreate
 
@@ -29,6 +31,30 @@ def _push_notification(db: Session, requirement: Requirement, user_id: int, noti
         is_read=False,
     )
     db.add(notif)
+
+
+def _has_full_requirement_access(user: User) -> bool:
+    return user_has_all_permissions(user, "users.manage", "roles.manage")
+
+
+def _visible_user_ids(db: Session, user: User) -> list[int]:
+    child_ids = [row.id for row in db.query(User.id).filter(User.parent_id == user.id).all()]
+    return [user.id, *child_ids]
+
+
+def _requirement_visible_filter(db: Session, user: User):
+    user_ids = _visible_user_ids(db, user)
+    return or_(
+        Requirement.added_by_id == user.id,
+        Requirement.assigned_to_id.in_(user_ids),
+    )
+
+
+def _can_access_requirement(db: Session, requirement: Requirement, user: User) -> bool:
+    if _has_full_requirement_access(user):
+        return True
+    user_ids = set(_visible_user_ids(db, user))
+    return requirement.added_by_id == user.id or requirement.assigned_to_id in user_ids
 
 
 # ---------------------------------------------------------------------------
@@ -68,28 +94,15 @@ def create_requirement(db: Session, payload: RequirementCreate, current_user: Us
 
 def list_requirements(db: Session, current_user: User) -> list[Requirement]:
     """
-    Users with requirement.view permission who are Admin see ALL requirements.
-    Regular users (or non-admin with view permission) see only their own (added/assigned).
+    Full system roles see all requirements.
+    Other users see records they created, records assigned to them, and records assigned to direct child users.
     """
-    from app.deps import user_permission_codes
-    perms = set(user_permission_codes(current_user))
-    is_admin = current_user.role and current_user.role.name == "Admin"
-
-    if "requirement.view" in perms and is_admin:
+    if _has_full_requirement_access(current_user):
         return db.query(Requirement).order_by(Requirement.created_at.desc()).all()
-
-    # Get child user IDs
-    child_users = db.query(User.id).filter(User.parent_id == current_user.id).all()
-    child_user_ids = [u.id for u in child_users]
 
     return (
         db.query(Requirement)
-        .filter(
-            (Requirement.added_by_id == current_user.id)
-            | (Requirement.assigned_to_id == current_user.id)
-            | (Requirement.assigned_to_id.in_(child_user_ids))
-            | (Requirement.added_by_id.in_(child_user_ids))
-        )
+        .filter(_requirement_visible_filter(db, current_user))
         .order_by(Requirement.created_at.desc())
         .all()
     )
@@ -104,9 +117,8 @@ def update_requirement(db: Session, req_id: int, payload: RequirementUpdate, cur
     if not req:
         raise ValueError("Requirement not found")
 
-    is_admin = current_user.role and current_user.role.name == "Admin"
-    if current_user.id != req.added_by_id and current_user.id != req.assigned_to_id and not is_admin:
-        raise HTTPException(status_code=403, detail="You can only edit requirements assigned to or created by you.")
+    if not _can_access_requirement(db, req, current_user):
+        raise HTTPException(status_code=403, detail="Requirement is not assigned to you, assigned by you, or assigned to your child user.")
 
     if payload.title is not None:
         req.title = payload.title
@@ -135,6 +147,9 @@ def complete_requirement(db: Session, req_id: int, current_user: User) -> Requir
     if not req:
         raise ValueError("Requirement not found")
 
+    if not _can_access_requirement(db, req, current_user):
+        raise HTTPException(status_code=403, detail="Requirement is not assigned to you, assigned by you, or assigned to your child user.")
+
     req.status = "Done"
     db.flush()
 
@@ -161,9 +176,8 @@ def delete_requirement(db: Session, req_id: int, current_user: User) -> None:
     if not req:
         raise ValueError("Requirement not found")
     
-    is_admin = current_user.role and current_user.role.name == "Admin"
-    if current_user.id != req.added_by_id and current_user.id != req.assigned_to_id and not is_admin:
-        raise HTTPException(status_code=403, detail="You can only delete requirements assigned to or created by you.")
+    if not _can_access_requirement(db, req, current_user):
+        raise HTTPException(status_code=403, detail="Requirement is not assigned to you, assigned by you, or assigned to your child user.")
 
     db.delete(req)
     db.commit()
@@ -173,6 +187,9 @@ def add_requirement_comment(db: Session, req_id: int, payload: RequirementCommen
     req = get_requirement(db, req_id)
     if not req:
         raise ValueError("Requirement not found")
+
+    if not _can_access_requirement(db, req, current_user):
+        raise HTTPException(status_code=403, detail="Requirement is not assigned to you, assigned by you, or assigned to your child user.")
 
     hist = RequirementHistory(
         requirement_id=req.id,

@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.deps import current_user, user_permission_codes
 from app.models import User
+from app.modules.time_tracking.services import start_day_log
 from app.schemas import LoginIn, Token, UserOut
 from app.security import create_access_token, verify_password
 
@@ -29,6 +30,7 @@ def login(payload: LoginIn, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == payload.email).first()
     if not user or not verify_password(payload.password, user.hashed_password) or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    start_day_log(db, user)
     return Token(access_token=create_access_token(user.email))
 
 

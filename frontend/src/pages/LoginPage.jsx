@@ -37,9 +37,8 @@ export function LoginPage() {
             <div className="logo-badge">
               <Database size={28} className="logo-icon" />
             </div>
-            <h2>Salvin</h2>
-            <h3>Data Management</h3>
-            <p className="subtext">Enterprise Marketing & Sales Portal</p>
+            <h2>Salvin India</h2>
+            <p className="subtext">Marketing & Sales Portal</p>
           </div>
 
           <div className="input-group-container">

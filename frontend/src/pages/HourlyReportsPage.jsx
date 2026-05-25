@@ -25,19 +25,24 @@ export function HourlyReportsPage({ user }) {
   };
 
   const generateTimeSlots = () => {
-    const slots = [];
+    const newSlots = [...reports];
     for (let i = 10; i <= 18; i++) {
-      slots.push({
-        id: `temp-${Date.now()}-${i}`,
-        work_date: workDate,
-        start_time: `${String(i).padStart(2, "0")}:00`,
-        end_time: `${String(i + 1).padStart(2, "0")}:00`,
-        description: "",
-        status: "Draft",
-        isNew: true,
-      });
+      const startStr = `${String(i).padStart(2, "0")}:00`;
+      const exists = reports.some((r) => r.start_time === startStr);
+      if (!exists) {
+        newSlots.push({
+          id: `temp-${Date.now()}-${i}`,
+          work_date: workDate,
+          start_time: startStr,
+          end_time: `${String(i + 1).padStart(2, "0")}:00`,
+          description: "",
+          status: "Draft",
+          isNew: true,
+        });
+      }
     }
-    setReports(slots);
+    newSlots.sort((a, b) => a.start_time.localeCompare(b.start_time));
+    setReports(newSlots);
   };
 
   const addRow = () => {
@@ -112,7 +117,6 @@ export function HourlyReportsPage({ user }) {
   };
 
   const submitDay = async () => {
-    if (!confirm("Submit all reports for this day? You will not be able to edit them after submitting.")) return;
     try {
       await api.submitHourlyReports(workDate);
       loadReports();
@@ -139,9 +143,9 @@ export function HourlyReportsPage({ user }) {
             onChange={(e) => setWorkDate(e.target.value)}
             className="date-picker"
           />
-          {reports.length === 0 && !loading && (
+          {!loading && (
             <button type="button" className="primary" onClick={generateTimeSlots}>
-              Auto-fill Time Slots
+              Auto-fill Missing Slots
             </button>
           )}
           {hasDrafts && (
@@ -174,7 +178,6 @@ export function HourlyReportsPage({ user }) {
                       type="time"
                       value={row.start_time}
                       onChange={(e) => updateRow(row.id, "start_time", e.target.value)}
-                      disabled={row.status === "Submitted"}
                     />
                   </td>
                   <td>
@@ -182,7 +185,6 @@ export function HourlyReportsPage({ user }) {
                       type="time"
                       value={row.end_time}
                       onChange={(e) => updateRow(row.id, "end_time", e.target.value)}
-                      disabled={row.status === "Submitted"}
                     />
                   </td>
                   <td>
@@ -191,7 +193,6 @@ export function HourlyReportsPage({ user }) {
                       placeholder="What did you work on?"
                       value={row.description}
                       onChange={(e) => updateRow(row.id, "description", e.target.value)}
-                      disabled={row.status === "Submitted"}
                     />
                   </td>
                   <td>
@@ -200,28 +201,24 @@ export function HourlyReportsPage({ user }) {
                     </span>
                   </td>
                   <td>
-                    {row.status !== "Submitted" && (
-                      <div className="row-actions">
-                        <button type="button" onClick={() => saveRow(row)} title="Save Draft" disabled={saving || !row.description.trim()}>
-                          <Save size={20} />
-                        </button>
-                        <button type="button" onClick={() => deleteRow(row.id, row.isNew)} title="Delete">
-                          <Trash size={20} />
-                        </button>
-                      </div>
-                    )}
+                    <div className="row-actions">
+                      <button type="button" onClick={() => saveRow(row)} title="Save Draft" disabled={saving || !row.description.trim()}>
+                        <Save size={20} />
+                      </button>
+                      <button type="button" onClick={() => deleteRow(row.id, row.isNew)} title="Delete">
+                        <Trash size={20} />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
-              {!allSubmitted && (
-                <tr>
-                  <td colSpan="5">
-                    <button type="button" className="add-row-btn" onClick={addRow}>
-                      <Plus size={18} /> Add Row
-                    </button>
-                  </td>
-                </tr>
-              )}
+              <tr>
+                <td colSpan="5">
+                  <button type="button" className="add-row-btn" onClick={addRow}>
+                    <Plus size={18} /> Add Row
+                  </button>
+                </td>
+              </tr>
             </tbody>
           </table>
         )}

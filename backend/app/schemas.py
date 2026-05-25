@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date
 
 from pydantic import BaseModel, ConfigDict, EmailStr, Field
 
@@ -282,3 +282,35 @@ class UserTimeLogOut(BaseModel):
     status: str
     active_break_start: datetime | None = None
     breaks: list[UserBreakLogOut] = []
+    server_time: datetime | None = None
+
+
+# --- Hourly Reporting ---
+
+class HourlyReportCreate(BaseModel):
+    work_date: date
+    start_time: str
+    end_time: str
+    description: str
+    status: str = "Draft"
+
+
+class HourlyReportUpdate(BaseModel):
+    start_time: str | None = None
+    end_time: str | None = None
+    description: str | None = None
+    status: str | None = None
+
+
+class HourlyReportOut(BaseModel):
+    id: int
+    user_id: int
+    work_date: date
+    start_time: str
+    end_time: str
+    description: str
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    
+    model_config = ConfigDict(from_attributes=True)

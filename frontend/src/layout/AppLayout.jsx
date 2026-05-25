@@ -17,6 +17,8 @@ import { FollowUpsPage } from "../pages/FollowUpsPage";
 import { InquiriesPage } from "../pages/InquiriesPage";
 import { RequirementsPage } from "../pages/RequirementsPage";
 import { TimeTrackingPage } from "../pages/TimeTrackingPage";
+import { HourlyReportsPage } from "../pages/HourlyReportsPage";
+import { TeamReportsPage } from "../pages/TeamReportsPage";
 import { NotificationBell } from "../components/NotificationBell";
 
 const pageMap = {
@@ -34,6 +36,8 @@ const pageMap = {
   requirements: RequirementsPage,
   "my-time": (props) => <TimeTrackingPage {...props} mode="my" />,
   "user-time": (props) => <TimeTrackingPage {...props} mode="users" />,
+  "hourly-reports": HourlyReportsPage,
+  "team-reports": TeamReportsPage,
 };
 
 function secondsToLabel(seconds = 0) {
@@ -44,14 +48,13 @@ function secondsToLabel(seconds = 0) {
   return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
-function liveTimeSeconds(timeLog) {
+function liveTimeSeconds(timeLog, fetchTime) {
   if (!timeLog?.login_at) return 0;
-  const now = Date.now();
-  const loginAt = new Date(timeLog.login_at).getTime();
-  const activeBreakStart = timeLog.active_break_start ? new Date(timeLog.active_break_start).getTime() : null;
-  const activeBreakSeconds = activeBreakStart ? Math.max(0, Math.floor((now - activeBreakStart) / 1000)) : 0;
-  const gross = Math.max(0, Math.floor((now - loginAt) / 1000));
-  return Math.max(0, gross - Number(timeLog.total_break_seconds || 0) - activeBreakSeconds);
+  const elapsed = Math.max(0, Math.floor((Date.now() - fetchTime) / 1000));
+  if (timeLog.status === "active") {
+    return Number(timeLog.total_work_seconds || 0) + elapsed;
+  }
+  return Number(timeLog.total_work_seconds || 0);
 }
 
 export function AppLayout({ page, setPage }) {
@@ -60,7 +63,9 @@ export function AppLayout({ page, setPage }) {
   const [openGroups, setOpenGroups] = useState({});
   const [editingId, setEditingId] = useState(null);
   const [timeLog, setTimeLog] = useState(null);
+  const [fetchTime, setFetchTime] = useState(Date.now());
   const [timeTick, setTimeTick] = useState(0);
+  const [lastNotifiedHour, setLastNotifiedHour] = useState(0);
   const canUseTime = user.permissions.some((permission) => ["time.view", "time.break", "time.manage"].includes(permission));
   const canOpen = (item) => user.permissions.includes(item.permission) || user.permissions.includes(item.alternatePermission);
   const allowed = useMemo(() => {
@@ -83,7 +88,12 @@ export function AppLayout({ page, setPage }) {
     let cancelled = false;
     const loadToday = () => {
       api.todayTime()
-        .then((data) => { if (!cancelled) setTimeLog(data); })
+        .then((data) => { 
+          if (!cancelled) {
+            setTimeLog(data);
+            setFetchTime(Date.now());
+          }
+        })
         .catch(() => {});
     };
     loadToday();
@@ -95,6 +105,33 @@ export function AppLayout({ page, setPage }) {
       window.clearInterval(tickId);
     };
   }, [canUseTime]);
+
+  useEffect(() => {
+    if (timeLog?.status !== "active") return;
+    if (Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+    const checkNotification = () => {
+      const elapsed = Math.max(0, Math.floor((Date.now() - fetchTime) / 1000));
+      const total = Number(timeLog.total_work_seconds || 0) + elapsed;
+      const currentHour = Math.floor(total / 3600);
+      if (currentHour > 0 && currentHour > lastNotifiedHour) {
+        setLastNotifiedHour(currentHour);
+        if (Notification.permission === "granted") {
+          const notif = new Notification("Hourly Report Reminder", {
+            body: `You've been working for ${currentHour} hour(s). Please submit your hourly report.`,
+          });
+          notif.onclick = () => {
+            window.focus();
+            setPage("hourly-reports");
+          };
+        }
+      }
+    };
+    const notifId = window.setInterval(checkNotification, 10000);
+    return () => window.clearInterval(notifId);
+  }, [timeLog, fetchTime, lastNotifiedHour, setPage]);
+
   const toggleGroup = (key) => {
     setOpenGroups((current) => ({ ...current, [key]: !current[key] }));
   };
@@ -104,12 +141,25 @@ export function AppLayout({ page, setPage }) {
     .join("")
     .slice(0, 2)
     .toUpperCase();
-  const startBreak = async () => setTimeLog(await api.startBreak());
-  const endBreak = async () => setTimeLog(await api.endBreak());
-  const breakSeconds = timeLog?.active_break_start
-    ? Math.max(0, Math.floor((Date.now() - new Date(timeLog.active_break_start).getTime()) / 1000))
+  const startBreak = async () => {
+    const data = await api.startBreak();
+    setTimeLog(data);
+    setFetchTime(Date.now());
+  };
+  const endBreak = async () => {
+    const data = await api.endBreak();
+    setTimeLog(data);
+    setFetchTime(Date.now());
+  };
+  const elapsedSinceFetch = Math.max(0, Math.floor((Date.now() - fetchTime) / 1000));
+  const breakSeconds = timeLog?.status === "on_break"
+    ? Number(timeLog.total_break_seconds || 0) + elapsedSinceFetch - Number(timeLog.total_break_seconds_without_active ?? 0)
     : 0;
-  const workSeconds = liveTimeSeconds(timeLog) + (timeTick * 0);
+  // Fallback to active_break_start if the backend doesn't provide total_break_seconds_without_active yet
+  const actualBreakSeconds = breakSeconds > 0 && typeof timeLog?.total_break_seconds_without_active !== 'undefined'
+    ? breakSeconds
+    : (timeLog?.status === "on_break" ? elapsedSinceFetch : 0);
+  const workSeconds = liveTimeSeconds(timeLog, fetchTime) + (timeTick * 0);
 
   return (
     <div className={`app ${navCollapsed ? "nav-collapsed" : ""}`}>
@@ -158,7 +208,19 @@ export function AppLayout({ page, setPage }) {
               </button>
             );
           })}
-          <button onClick={logout} title="Logout"><LogOut size={16} /><span>Logout</span><ChevronRight size={15} /></button>
+          <button onClick={async () => {
+            try {
+              const { has_pending } = await api.checkPendingReports();
+              if (has_pending) {
+                window.dispatchEvent(new CustomEvent("erp:notify", { detail: { message: "Please submit your daily reports before logging out.", type: "error" } }));
+                setPage("hourly-reports");
+                return;
+              }
+            } catch (err) {
+              console.error(err);
+            }
+            logout();
+          }} title="Logout"><LogOut size={16} /><span>Logout</span><ChevronRight size={15} /></button>
         </nav>
         <button type="button" className="sidebar-footer" onClick={() => setNavCollapsed((current) => !current)} title={navCollapsed ? "Open menu" : "Close menu"}>
           <ChevronsLeft size={18} />
@@ -206,7 +268,7 @@ export function AppLayout({ page, setPage }) {
             <div className="break-panel">
               <Coffee size={38} />
               <h2>On Break</h2>
-              <p>{secondsToLabel(breakSeconds)}</p>
+              <p>{secondsToLabel(actualBreakSeconds)}</p>
               <button type="button" className="icon-button" onClick={endBreak}>
                 <Play size={16} /> Back to Work
               </button>

@@ -276,3 +276,17 @@ class UserBreakLog(Base, TimestampMixin):
 
     time_log: Mapped[UserTimeLog] = relationship(back_populates="breaks")
     user: Mapped[User] = relationship(foreign_keys=[user_id])
+
+
+class HourlyReport(Base, TimestampMixin):
+    __tablename__ = "hourly_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    work_date: Mapped[date] = mapped_column(Date, index=True)
+    start_time: Mapped[str] = mapped_column(String(10)) # e.g. "10:00"
+    end_time: Mapped[str] = mapped_column(String(10))   # e.g. "11:00"
+    description: Mapped[str] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="Draft") # Draft, Submitted
+
+    user: Mapped[User] = relationship()

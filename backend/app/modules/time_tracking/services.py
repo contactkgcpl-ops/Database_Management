@@ -171,4 +171,5 @@ def to_time_log_out(log: UserTimeLog) -> UserTimeLogOut:
         status=log.status,
         active_break_start=active.break_start if active else None,
         breaks=[UserBreakLogOut.model_validate(item) for item in log.breaks],
+        server_time=current_time,
     )

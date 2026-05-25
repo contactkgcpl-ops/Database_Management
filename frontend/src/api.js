@@ -19,9 +19,9 @@ function showError(message) {
 }
 
 export const tokenStore = {
-  get: () => localStorage.getItem("erp_token"),
-  set: (token) => localStorage.setItem("erp_token", token),
-  clear: () => localStorage.removeItem("erp_token"),
+  get: () => sessionStorage.getItem("erp_token"),
+  set: (token) => sessionStorage.setItem("erp_token", token),
+  clear: () => sessionStorage.removeItem("erp_token"),
 };
 
 export function assetUrl(path) {
@@ -126,4 +126,12 @@ export const api = {
   markTimeLogout: () => request("/time/logout", { method: "POST" }),
   startBreak: () => request("/time/break/start", { method: "POST" }),
   endBreak: () => request("/time/break/end", { method: "POST" }),
+  // Hourly Reporting
+  allHourlyReports: (q = "") => request(`/reporting/all${q ? `?${q}` : ""}`),
+  hourlyReports: (q = "") => request(`/reporting${q ? `?${q}` : ""}`),
+  createHourlyReport: (data) => request("/reporting", { method: "POST", body: JSON.stringify(data) }),
+  updateHourlyReport: (id, data) => request(`/reporting/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteHourlyReport: (id) => request(`/reporting/${id}`, { method: "DELETE" }),
+  submitHourlyReports: (workDate) => request(`/reporting/submit?work_date=${workDate}`, { method: "POST" }),
+  checkPendingReports: () => request("/reporting/check-pending"),
 };

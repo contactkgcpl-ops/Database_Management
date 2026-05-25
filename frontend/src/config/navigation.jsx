@@ -46,6 +46,8 @@ export const navigation = [
     children: [
       { key: "my-time", label: "My Time", icon: Clock, page: "my-time", permission: "time.view", alternatePermission: "time.break" },
       { key: "user-time", label: "User Time", icon: Users, page: "user-time", permission: "time.manage" },
+      { key: "hourly-reports", label: "Hourly Reports", icon: Clock, page: "hourly-reports", permission: "time.view" },
+      { key: "team-reports", label: "Team Reports", icon: Users, page: "team-reports", permission: "time.manage" },
     ],
   },
   {

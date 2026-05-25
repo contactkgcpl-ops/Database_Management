@@ -107,5 +107,16 @@ export const api = {
   createInquiry: (data) => request("/inquiries", { method: "POST", body: JSON.stringify(data) }),
   assignInquiry: (id, userId) => request(`/inquiries/${id}/assign`, { method: "PUT", body: JSON.stringify({ user_id: userId ? Number(userId) : null }) }),
   updateInquiryStage: (id, payload) => request(`/inquiries/${id}/stage`, { method: "PUT", body: JSON.stringify(payload) }),
-  convertLeadToInquiry: (companyId, payload) => request(`/leads/${companyId}/convert`, { method: "POST", body: JSON.stringify(payload) }),
+  convertLeadToInquiry: (companyId, payload) => request(`/leads/${companyId}/convert`, { method: "POST", body: requestBody(payload) }),
+  // Requirements
+  requirements: () => request("/requirements"),
+  createRequirement: (data) => request("/requirements", { method: "POST", body: requestBody(data) }),
+  updateRequirement: (id, data) => request(`/requirements/${id}`, { method: "PUT", body: requestBody(data) }),
+  completeRequirement: (id) => request(`/requirements/${id}/complete`, { method: "PUT" }),
+  deleteRequirement: (id) => request(`/requirements/${id}`, { method: "DELETE" }),
+  addRequirementComment: (id, payload) => request(`/requirements/${id}/comments`, { method: "POST", body: JSON.stringify(payload) }),
+  // Requirement Notifications
+  myNotifications: () => request("/requirements/notifications"),
+  markNotificationRead: (id) => request(`/requirements/notifications/${id}/read`, { method: "PUT" }),
+  markAllNotificationsRead: () => request("/requirements/notifications/read-all", { method: "PUT" }),
 };

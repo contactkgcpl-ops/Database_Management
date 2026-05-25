@@ -14,6 +14,7 @@ from app.modules.roles import router as roles
 from app.modules.users import router as users
 from app.modules.leads import router as leads
 from app.modules.inquiries import router as inquiries
+from app.modules.requirements import router as requirements
 from app.seed import seed_defaults
 
 settings = get_settings()
@@ -55,3 +56,4 @@ app.include_router(properties.router, prefix="/api")
 app.include_router(companies.router, prefix="/api")
 app.include_router(leads.router, prefix="/api")
 app.include_router(inquiries.router, prefix="/api")
+app.include_router(requirements.router, prefix="/api")

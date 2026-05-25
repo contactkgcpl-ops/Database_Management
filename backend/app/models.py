@@ -195,3 +195,52 @@ class LeadFollowUp(Base, TimestampMixin):
 
     company: Mapped[Company] = relationship()
     assigned_to: Mapped[User | None] = relationship(foreign_keys=[assigned_to_id])
+
+
+class Requirement(Base, TimestampMixin):
+    __tablename__ = "requirements"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(255), index=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    priority: Mapped[str] = mapped_column(String(20), default="Medium")  # Low, Medium, High, Urgent
+    status: Mapped[str] = mapped_column(String(30), default="Open")  # Open, In Progress, Done, Closed
+    due_date: Mapped[datetime | None] = mapped_column(DateTime)
+    added_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    assigned_to_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+
+    added_by: Mapped[User | None] = relationship(foreign_keys=[added_by_id])
+    assigned_to: Mapped[User | None] = relationship(foreign_keys=[assigned_to_id])
+    notifications: Mapped[list["RequirementNotification"]] = relationship(
+        cascade="all, delete-orphan", back_populates="requirement"
+    )
+    history: Mapped[list["RequirementHistory"]] = relationship(
+        cascade="all, delete-orphan", back_populates="requirement", order_by="RequirementHistory.created_at"
+    )
+
+
+class RequirementNotification(Base, TimestampMixin):
+    __tablename__ = "requirement_notifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    requirement_id: Mapped[int] = mapped_column(ForeignKey("requirements.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    type: Mapped[str] = mapped_column(String(30), default="assigned")  # assigned, completed, comment
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    requirement: Mapped[Requirement] = relationship(back_populates="notifications")
+    user: Mapped[User] = relationship(foreign_keys=[user_id])
+
+
+class RequirementHistory(Base, TimestampMixin):
+    __tablename__ = "requirement_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    requirement_id: Mapped[int] = mapped_column(ForeignKey("requirements.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    type: Mapped[str] = mapped_column(String(30))  # created, status_change, comment, read
+    remark: Mapped[str | None] = mapped_column(Text)
+
+    requirement: Mapped[Requirement] = relationship(back_populates="history")
+    user: Mapped[User | None] = relationship(foreign_keys=[user_id])
+

@@ -1,4 +1,4 @@
-import { Building2, LayoutDashboard, ListTree, Shield, Users, Sparkles } from "lucide-react";
+import { Building2, ClipboardList, LayoutDashboard, ListTree, Shield, Users, Sparkles } from "lucide-react";
 
 export const navigation = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, page: "dashboard", permission: "dashboard.view" },
@@ -39,6 +39,14 @@ export const navigation = [
     ],
   },
   { key: "properties", label: "Properties", icon: ListTree, page: "properties", permission: "properties.view" },
+  {
+    key: "operations",
+    label: "Operations",
+    icon: ClipboardList,
+    children: [
+      { key: "requirements", label: "Requirements", icon: ClipboardList, page: "requirements", permission: "requirement.view" },
+    ],
+  },
 ];
 
 export const flatNavigation = navigation.flatMap((item) => item.children || [item]);

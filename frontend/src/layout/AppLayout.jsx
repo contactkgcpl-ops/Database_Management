@@ -15,6 +15,8 @@ import { UsersPage } from "../pages/UsersPage";
 import { MyLeadsPage } from "../pages/MyLeadsPage";
 import { FollowUpsPage } from "../pages/FollowUpsPage";
 import { InquiriesPage } from "../pages/InquiriesPage";
+import { RequirementsPage } from "../pages/RequirementsPage";
+import { NotificationBell } from "../components/NotificationBell";
 
 const pageMap = {
   dashboard: DashboardPage,
@@ -28,6 +30,7 @@ const pageMap = {
   "my-leads": MyLeadsPage,
   "today-followup": FollowUpsPage,
   inquiries: InquiriesPage,
+  requirements: RequirementsPage,
 };
 
 export function AppLayout({ page, setPage }) {
@@ -119,6 +122,7 @@ export function AppLayout({ page, setPage }) {
         <header>
           <div className="page-chip">{pageLabel}</div>
           <div className="topbar-actions">
+            <NotificationBell onNavigateToRequirements={() => setPage("requirements")} />
             <div className="user-chip">
               {user.profile_image_url ? (
                 <img src={assetUrl(user.profile_image_url)} alt={user.name} className="avatar" style={{ objectFit: 'cover' }} />

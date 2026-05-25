@@ -24,6 +24,10 @@ DEFAULT_PERMISSIONS = [
     ("inquiry.convert", "Convert Lead To Inquiry", "contact", "Contact", 73),
     ("inquiry.assign", "Assign Inquiry", "contact", "Contact", 74),
     ("inquiry.pipeline", "Update Inquiry Pipeline", "contact", "Contact", 75),
+    ("requirement.view", "View Requirements", "requirements", "Requirements", 80),
+    ("requirement.create", "Create Requirement", "requirements", "Requirements", 81),
+    ("requirement.update", "Update Requirement", "requirements", "Requirements", 82),
+    ("requirement.delete", "Delete Requirement", "requirements", "Requirements", 83),
 ]
 
 DEFAULT_PROPERTIES = [

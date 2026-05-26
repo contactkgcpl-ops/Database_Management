@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Calendar, Search, X, Plus, Mail, History, Pencil, CheckCircle, BarChart3, Layers, ArrowRight, RefreshCcw, Download } from "lucide-react";
+import { Calendar, Search, X, Plus, Mail, History, Pencil, CheckCircle, BarChart3, Layers, ArrowRight, RefreshCcw, Download, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useNotify } from "../components/NotificationProvider";
 import { useAuth } from "../context/AuthContext";
@@ -13,6 +13,7 @@ const columns = [
   { key: "created_at", label: "Date", width: 120 },
   { key: "company_name", label: "Customer Name", width: 200 },
   { key: "contact_person", label: "Contact Person", width: 140 },
+  { key: "contact_number", label: "Contact Number", width: 130 },
   { key: "quick_connect", label: "Mobile / Email", width: 150 },
   { key: "requirement", label: "Requirement", width: 180 },
   { key: "inquiry_source", label: "Source", width: 120 },
@@ -143,6 +144,17 @@ export function InquiriesPage() {
       inquiries.reload();
     } catch (err) {
       notify("Failed to assign inquiry", "error");
+    }
+  };
+
+  const handleDeleteInquiry = async (id) => {
+    if (!window.confirm("Are you sure you want to delete this inquiry? This will also delete the associated company record and cannot be undone.")) return;
+    try {
+      await api.deleteCompany(id);
+      notify("Inquiry deleted successfully", "success");
+      inquiries.reload();
+    } catch (err) {
+      notify("Failed to delete inquiry", "error");
     }
   };
 
@@ -417,54 +429,54 @@ export function InquiriesPage() {
     <div className="stack inquiries-page" style={{ padding: "0px 10px" }}>
 
       {/* 6 Metric cards aligned with Ref Image */}
-      <div className="crm-dashboard-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))", gap: "16px", marginBottom: "20px" }}>
+      <div className="crm-dashboard-grid" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(130px, 1fr))", gap: "10px", marginBottom: "12px" }}>
 
-        <div className="crm-metric-card total" style={{ background: "linear-gradient(135deg, #176b5b, #0c4339)", color: "#fff", padding: "16px 20px", borderRadius: "10px", boxShadow: "0 4px 10px rgba(23,107,91,0.12)", position: "relative", overflow: "hidden" }}>
+        <div className="crm-metric-card total" style={{ background: "linear-gradient(135deg, #176b5b, #0c4339)", color: "#fff", padding: "10px 14px", borderRadius: "8px", boxShadow: "0 2px 6px rgba(23,107,91,0.12)", position: "relative", overflow: "hidden" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: "11px", textTransform: "uppercase", fontWeight: "700", opacity: 0.85, letterSpacing: "0.5px" }}>Total Inquiries</span>
-            <Layers size={18} style={{ opacity: 0.7 }} />
+            <span style={{ fontSize: "10px", textTransform: "uppercase", fontWeight: "700", opacity: 0.85, letterSpacing: "0.5px" }}>Total Inquiries</span>
+            <Layers size={14} style={{ opacity: 0.7 }} />
           </div>
-          <h2 style={{ fontSize: "30px", margin: "8px 0 0 0", fontWeight: "800" }}>{metrics.total}</h2>
+          <h2 style={{ fontSize: "22px", margin: "4px 0 0 0", fontWeight: "800" }}>{metrics.total}</h2>
         </div>
 
-        <div className="crm-metric-card new" style={{ background: "linear-gradient(135deg, #0f766e, #115e59)", color: "#fff", padding: "16px 20px", borderRadius: "10px", boxShadow: "0 4px 10px rgba(15,118,110,0.12)", position: "relative", overflow: "hidden" }}>
+        <div className="crm-metric-card new" style={{ background: "linear-gradient(135deg, #0f766e, #115e59)", color: "#fff", padding: "10px 14px", borderRadius: "8px", boxShadow: "0 2px 6px rgba(15,118,110,0.12)", position: "relative", overflow: "hidden" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: "11px", textTransform: "uppercase", fontWeight: "700", opacity: 0.85, letterSpacing: "0.5px" }}>New Inquiries</span>
-            <Plus size={18} style={{ opacity: 0.7 }} />
+            <span style={{ fontSize: "10px", textTransform: "uppercase", fontWeight: "700", opacity: 0.85, letterSpacing: "0.5px" }}>New Inquiries</span>
+            <Plus size={14} style={{ opacity: 0.7 }} />
           </div>
-          <h2 style={{ fontSize: "30px", margin: "8px 0 0 0", fontWeight: "800" }}>{metrics.newInqs}</h2>
+          <h2 style={{ fontSize: "22px", margin: "4px 0 0 0", fontWeight: "800" }}>{metrics.newInqs}</h2>
         </div>
 
-        <div className="crm-metric-card pending" style={{ background: "linear-gradient(135deg, #ea580c, #c2410c)", color: "#fff", padding: "16px 20px", borderRadius: "10px", boxShadow: "0 4px 10px rgba(234,88,12,0.12)", position: "relative", overflow: "hidden" }}>
+        <div className="crm-metric-card pending" style={{ background: "linear-gradient(135deg, #ea580c, #c2410c)", color: "#fff", padding: "10px 14px", borderRadius: "8px", boxShadow: "0 2px 6px rgba(234,88,12,0.12)", position: "relative", overflow: "hidden" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: "11px", textTransform: "uppercase", fontWeight: "700", opacity: 0.85, letterSpacing: "0.5px" }}>Pending Follow-up</span>
-            <Calendar size={18} style={{ opacity: 0.7 }} />
+            <span style={{ fontSize: "10px", textTransform: "uppercase", fontWeight: "700", opacity: 0.85, letterSpacing: "0.5px" }}>Pending</span>
+            <Calendar size={14} style={{ opacity: 0.7 }} />
           </div>
-          <h2 style={{ fontSize: "30px", margin: "8px 0 0 0", fontWeight: "800" }}>{metrics.pendingFollowups}</h2>
+          <h2 style={{ fontSize: "22px", margin: "4px 0 0 0", fontWeight: "800" }}>{metrics.pendingFollowups}</h2>
         </div>
 
-        <div className="crm-metric-card quotation" style={{ background: "linear-gradient(135deg, #8b5cf6, #6d28d9)", color: "#fff", padding: "16px 20px", borderRadius: "10px", boxShadow: "0 4px 10px rgba(139,92,246,0.12)", position: "relative", overflow: "hidden" }}>
+        <div className="crm-metric-card quotation" style={{ background: "linear-gradient(135deg, #8b5cf6, #6d28d9)", color: "#fff", padding: "10px 14px", borderRadius: "8px", boxShadow: "0 2px 6px rgba(139,92,246,0.12)", position: "relative", overflow: "hidden" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: "11px", textTransform: "uppercase", fontWeight: "700", opacity: 0.85, letterSpacing: "0.5px" }}>Quotation Sent</span>
-            <Mail size={18} style={{ opacity: 0.7 }} />
+            <span style={{ fontSize: "10px", textTransform: "uppercase", fontWeight: "700", opacity: 0.85, letterSpacing: "0.5px" }}>Quotations</span>
+            <Mail size={14} style={{ opacity: 0.7 }} />
           </div>
-          <h2 style={{ fontSize: "30px", margin: "8px 0 0 0", fontWeight: "800" }}>{metrics.quotations}</h2>
+          <h2 style={{ fontSize: "22px", margin: "4px 0 0 0", fontWeight: "800" }}>{metrics.quotations}</h2>
         </div>
 
-        <div className="crm-metric-card converted" style={{ background: "linear-gradient(135deg, #16a34a, #15803d)", color: "#fff", padding: "16px 20px", borderRadius: "10px", boxShadow: "0 4px 10px rgba(22,163,74,0.12)", position: "relative", overflow: "hidden" }}>
+        <div className="crm-metric-card converted" style={{ background: "linear-gradient(135deg, #16a34a, #15803d)", color: "#fff", padding: "10px 14px", borderRadius: "8px", boxShadow: "0 2px 6px rgba(22,163,74,0.12)", position: "relative", overflow: "hidden" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: "11px", textTransform: "uppercase", fontWeight: "700", opacity: 0.85, letterSpacing: "0.5px" }}>Converted to Order</span>
-            <CheckCircle size={18} style={{ opacity: 0.7 }} />
+            <span style={{ fontSize: "10px", textTransform: "uppercase", fontWeight: "700", opacity: 0.85, letterSpacing: "0.5px" }}>Converted</span>
+            <CheckCircle size={14} style={{ opacity: 0.7 }} />
           </div>
-          <h2 style={{ fontSize: "30px", margin: "8px 0 0 0", fontWeight: "800" }}>{metrics.orders}</h2>
+          <h2 style={{ fontSize: "22px", margin: "4px 0 0 0", fontWeight: "800" }}>{metrics.orders}</h2>
         </div>
 
-        <div className="crm-metric-card lost" style={{ background: "linear-gradient(135deg, #dc2626, #b91c1c)", color: "#fff", padding: "16px 20px", borderRadius: "10px", boxShadow: "0 4px 10px rgba(220,38,38,0.12)", position: "relative", overflow: "hidden" }}>
+        <div className="crm-metric-card lost" style={{ background: "linear-gradient(135deg, #dc2626, #b91c1c)", color: "#fff", padding: "10px 14px", borderRadius: "8px", boxShadow: "0 2px 6px rgba(220,38,38,0.12)", position: "relative", overflow: "hidden" }}>
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-            <span style={{ fontSize: "11px", textTransform: "uppercase", fontWeight: "700", opacity: 0.85, letterSpacing: "0.5px" }}>Lost Inquiries</span>
-            <X size={18} style={{ opacity: 0.7 }} />
+            <span style={{ fontSize: "10px", textTransform: "uppercase", fontWeight: "700", opacity: 0.85, letterSpacing: "0.5px" }}>Lost Inquiries</span>
+            <X size={14} style={{ opacity: 0.7 }} />
           </div>
-          <h2 style={{ fontSize: "30px", margin: "8px 0 0 0", fontWeight: "800" }}>{metrics.lost}</h2>
+          <h2 style={{ fontSize: "22px", margin: "4px 0 0 0", fontWeight: "800" }}>{metrics.lost}</h2>
         </div>
       </div>
 
@@ -640,6 +652,9 @@ export function InquiriesPage() {
                               <span className="cell-text">{getPropValue(inq, "contact_person") || "-"}</span>
                             </td>
                             <td>
+                              <span className="cell-text">{getPropValue(inq, "contact_number") || "-"}</span>
+                            </td>
+                            <td>
                               {(() => {
                                 const contactNumber = getPropValue(inq, "contact_number") || "";
                                 const emailId = getPropValue(inq, "email_id") || "";
@@ -736,6 +751,15 @@ export function InquiriesPage() {
                                   style={{ background: "#0f766e" }}
                                 >
                                   <History size={13} />
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={() => handleDeleteInquiry(inq.id)}
+                                  className="cell-icon-button"
+                                  title="Delete Inquiry"
+                                  style={{ background: "#dc2626" }}
+                                >
+                                  <Trash2 size={13} />
                                 </button>
                               </div>
                             </td>
@@ -1148,7 +1172,7 @@ export function InquiriesPage() {
           color: #334155;
         }
 
-        .inquiries-page .table-wrap { overflow: auto; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; }
+        .inquiries-page .table-wrap { height: calc(100vh - 260px); overflow: auto; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; }
         .inquiries-page .company-table { width: 100%; border-collapse: separate; border-spacing: 0; min-width: max-content; }
         .inquiries-page .company-table th,
         .inquiries-page .company-table td { padding: 8px 12px; font-size: 13px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; text-align: left; }

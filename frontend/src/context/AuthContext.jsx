@@ -13,9 +13,32 @@ export function AuthProvider({ children }) {
       return;
     }
     api.me()
-      .then(setUser)
+      .then(async (userData) => {
+        setUser(userData);
+        try {
+          await api.timeResume();
+        } catch (e) {
+          console.error("Failed to resume time tracking:", e);
+        }
+      })
       .catch(() => tokenStore.clear())
       .finally(() => setBooting(false));
+  }, []);
+
+  useEffect(() => {
+    const handleUnload = () => {
+      const token = tokenStore.get();
+      if (token) {
+        const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+        fetch(`${API_URL}/time/logout`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          keepalive: true,
+        }).catch(() => {});
+      }
+    };
+    window.addEventListener("unload", handleUnload);
+    return () => window.removeEventListener("unload", handleUnload);
   }, []);
 
   const login = async (email, password) => {

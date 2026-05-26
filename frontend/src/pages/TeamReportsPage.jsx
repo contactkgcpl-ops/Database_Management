@@ -1,9 +1,11 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
+import { Search, RefreshCw } from "lucide-react";
 import { api } from "../api";
 
 export function TeamReportsPage() {
   const [workDate, setWorkDate] = useState(new Date().toISOString().split("T")[0]);
   const [userId, setUserId] = useState("");
+  const [appliedFilters, setAppliedFilters] = useState({ workDate: new Date().toISOString().split("T")[0], userId: "" });
   const [reports, setReports] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -14,7 +16,7 @@ export function TeamReportsPage() {
 
   useEffect(() => {
     loadReports();
-  }, [workDate, userId]);
+  }, [appliedFilters]);
 
   const loadUsers = async () => {
     try {
@@ -28,9 +30,9 @@ export function TeamReportsPage() {
   const loadReports = async () => {
     setLoading(true);
     try {
-      let query = `work_date=${workDate}`;
-      if (userId) {
-        query += `&user_id=${userId}`;
+      let query = `work_date=${appliedFilters.workDate}`;
+      if (appliedFilters.userId) {
+        query += `&user_id=${appliedFilters.userId}`;
       }
       const data = await api.allHourlyReports(query);
       setReports(data);
@@ -41,36 +43,54 @@ export function TeamReportsPage() {
     }
   };
 
+  const groupedReports = useMemo(() => {
+    const groups = {};
+    for (const report of reports) {
+      if (!groups[report.user_id]) {
+        groups[report.user_id] = [];
+      }
+      groups[report.user_id].push(report);
+    }
+    return Object.values(groups).map(userReports => {
+      return userReports.sort((a, b) => a.start_time.localeCompare(b.start_time));
+    });
+  }, [reports]);
+
   return (
-    <div className="crm-page reports-page">
-      <div className="page-header">
-        <div>
-          <h1>Team Hourly Reports</h1>
-          <p>View what your team worked on by date and user.</p>
-        </div>
-        <div className="reports-actions">
-          <select value={userId} onChange={(e) => setUserId(e.target.value)} className="date-picker">
-            <option value="">All Users</option>
-            {users.map((u) => (
-              <option key={u.id} value={u.id}>{u.name}</option>
-            ))}
-          </select>
-          <input
-            type="date"
-            value={workDate}
-            onChange={(e) => setWorkDate(e.target.value)}
-            className="date-picker"
-          />
+    <div className="stack inquiries-page" style={{ padding: "0px 10px" }}>
+      <div className="inquiry-command-bar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: "700", color: "#475569" }}>
+            Work Date
+            <input
+              type="date"
+              value={workDate}
+              onChange={(e) => setWorkDate(e.target.value)}
+              className="filter-input"
+              style={{ padding: "6px 8px", border: "1px solid #cbd5e1", borderRadius: "4px", fontSize: "12px" }}
+            />
+          </label>
+          <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: "700", color: "#475569" }}>
+            User
+            <select value={userId} onChange={(e) => setUserId(e.target.value)} className="filter-input" style={{ padding: "6px 8px", border: "1px solid #cbd5e1", borderRadius: "4px", fontSize: "12px" }}>
+              <option value="">All Users</option>
+              {users.map((u) => (
+                <option key={u.id} value={u.id}>{u.name}</option>
+              ))}
+            </select>
+          </label>
+          <button type="button" className="primary icon-button" onClick={() => setAppliedFilters({ workDate, userId })} style={{ backgroundColor: "#176b5b", color: "#fff", display: "flex", alignItems: "center", gap: "6px", height: "30px", padding: "0 14px", borderRadius: "6px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "600" }}>
+            <Search size={14} /> Search
+          </button>
+          <button type="button" className="secondary icon-button small-action" onClick={loadReports} style={{ height: "30px", width: "30px", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }} title="Refresh">
+            <RefreshCw size={14} />
+          </button>
         </div>
       </div>
 
-      <div className="sheet-container">
-        {loading ? (
-          <div className="loading">Loading reports...</div>
-        ) : reports.length === 0 ? (
-          <div className="loading">No reports found for this date.</div>
-        ) : (
-          <table className="sheet-table">
+      <div className="data-grid">
+        <div className="table-wrap">
+          <table className="company-table">
             <thead>
               <tr>
                 <th style={{ width: "200px" }}>User</th>
@@ -81,45 +101,49 @@ export function TeamReportsPage() {
               </tr>
             </thead>
             <tbody>
-              {reports.map((row) => {
-                const user = users.find(u => u.id === row.user_id);
-                return (
-                  <tr key={row.id}>
-                    <td><strong>{user ? user.name : `User ${row.user_id}`}</strong></td>
-                    <td>{row.start_time}</td>
-                    <td>{row.end_time}</td>
-                    <td>{row.description}</td>
-                    <td>
-                      <span className={`status-badge ${row.status.toLowerCase()}`}>
-                        {row.status}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
+              {loading ? (
+                <tr><td colSpan={5} style={{ padding: "40px", textAlign: "center", color: "#64748b" }}>Loading reports...</td></tr>
+              ) : reports.length === 0 ? (
+                <tr><td colSpan={5} style={{ padding: "40px", textAlign: "center", color: "#64748b" }}>No reports found for this date.</td></tr>
+              ) : (
+                groupedReports.map((userReports) => {
+                  const firstRow = userReports[0];
+                  const user = users.find(u => u.id === firstRow.user_id);
+                  return (
+                    <React.Fragment key={`user-${firstRow.user_id}`}>
+                      {userReports.map((row, index) => (
+                        <tr key={row.id} className={row.status === "Submitted" ? "order-placed-row" : ""}>
+                          {index === 0 && (
+                            <td rowSpan={userReports.length} style={{ verticalAlign: 'top', borderRight: '1px solid #edf2f7', background: '#fff' }}>
+                              <span className="cell-text"><strong>{user ? user.name : `User ${row.user_id}`}</strong></span>
+                            </td>
+                          )}
+                          <td><span className="cell-text">{row.start_time}</span></td>
+                          <td><span className="cell-text">{row.end_time}</span></td>
+                          <td><span className="cell-text">{row.description}</span></td>
+                          <td>
+                            <span className={`status-badge ${row.status.toLowerCase()}`}>
+                              {row.status}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </React.Fragment>
+                  );
+                })
+              )}
             </tbody>
           </table>
-        )}
+        </div>
       </div>
       <style dangerouslySetInnerHTML={{ __html: `
-        .reports-page { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
-        .page-header { display: flex; justify-content: space-between; align-items: flex-start; }
-        .page-header h1 { margin: 0; font-size: 24px; color: #0f172a; }
-        .page-header p { margin: 4px 0 0; color: #64748b; font-size: 14px; }
-        .reports-actions { display: flex; gap: 12px; align-items: center; }
-        .date-picker { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; background: #fff; }
-        
-        .sheet-container { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
-        .sheet-table { width: 100%; border-collapse: collapse; text-align: left; }
-        .sheet-table th { background: #f8fafc; padding: 12px 16px; font-size: 13px; font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; }
-        .sheet-table td { padding: 12px 16px; border-bottom: 1px solid #f1f5f9; color: #0f172a; }
-        
-        .status-badge { display: inline-block; padding: 4px 8px; border-radius: 99px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+        .inquiry-command-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; margin-bottom: 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
+        .row-actions { display: flex; align-items: center; gap: 8px; }
+
+        .status-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
         .status-badge.draft { background: #f1f5f9; color: #64748b; }
         .status-badge.saved { background: #fef3c7; color: #d97706; }
         .status-badge.submitted { background: #dcfce7; color: #166534; }
-        
-        .loading { padding: 40px; text-align: center; color: #64748b; }
       ` }} />
     </div>
   );

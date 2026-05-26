@@ -1,4 +1,4 @@
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 
 from sqlalchemy.orm import Session, joinedload
 
@@ -11,7 +11,13 @@ def today() -> date:
 
 
 def now() -> datetime:
-    return datetime.now()
+    return datetime.utcnow()
+
+
+def add_utc_tz(dt: datetime | None) -> datetime | None:
+    if dt is None:
+        return None
+    return dt.replace(tzinfo=timezone.utc)
 
 
 def active_break(log: UserTimeLog) -> UserBreakLog | None:
@@ -66,6 +72,15 @@ def get_today_log(db: Session, user: User, create: bool = False) -> UserTimeLog 
 def start_day_log(db: Session, user: User) -> UserTimeLog:
     log = get_today_log(db, user, create=True)
     if log.logout_at is not None:
+        offline_seconds = max(0, int((now() - log.logout_at).total_seconds()))
+        if offline_seconds > 30:
+            db.add(UserBreakLog(
+                time_log_id=log.id,
+                user_id=user.id,
+                break_start=log.logout_at,
+                break_end=now(),
+                break_seconds=offline_seconds
+            ))
         log.logout_at = None
         log.status = "active"
     recalculate_log(log)
@@ -159,17 +174,25 @@ def to_time_log_out(log: UserTimeLog) -> UserTimeLogOut:
     active = active_break(log)
     break_seconds = calculate_break_seconds(log, current_time)
     work_seconds = calculate_work_seconds(log, current_time)
+    
+    breaks = []
+    for item in log.breaks:
+        out = UserBreakLogOut.model_validate(item)
+        out.break_start = add_utc_tz(out.break_start)
+        out.break_end = add_utc_tz(out.break_end)
+        breaks.append(out)
+
     return UserTimeLogOut(
         id=log.id,
         user_id=log.user_id,
         user_name=log.user.name if log.user else None,
         work_date=log.work_date.isoformat(),
-        login_at=log.login_at,
-        logout_at=log.logout_at,
+        login_at=add_utc_tz(log.login_at),
+        logout_at=add_utc_tz(log.logout_at),
         total_break_seconds=break_seconds,
         total_work_seconds=work_seconds,
         status=log.status,
-        active_break_start=active.break_start if active else None,
-        breaks=[UserBreakLogOut.model_validate(item) for item in log.breaks],
-        server_time=current_time,
+        active_break_start=add_utc_tz(active.break_start) if active else None,
+        breaks=breaks,
+        server_time=add_utc_tz(current_time),
     )

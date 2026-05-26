@@ -61,6 +61,11 @@ def mark_logout(db: Session = Depends(get_db), user: User = Depends(current_user
     return to_time_log_out(close_day_log(db, user))
 
 
+@router.post("/resume", response_model=UserTimeLogOut)
+def resume_time(db: Session = Depends(get_db), user: User = Depends(current_user)):
+    return to_time_log_out(start_day_log(db, user))
+
+
 @router.post("/break/start", response_model=UserTimeLogOut)
 def start_user_break(
     db: Session = Depends(get_db),

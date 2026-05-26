@@ -1,21 +1,22 @@
 import React, { useState, useEffect } from "react";
-import { Plus, Save, Trash, Send } from "lucide-react";
+import { Plus, Save, Trash, Send, Search, RefreshCw } from "lucide-react";
 import { api } from "../api";
 
 export function HourlyReportsPage({ user }) {
   const [workDate, setWorkDate] = useState(new Date().toISOString().split("T")[0]);
+  const [appliedWorkDate, setAppliedWorkDate] = useState(new Date().toISOString().split("T")[0]);
   const [reports, setReports] = useState([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     loadReports();
-  }, [workDate]);
+  }, [appliedWorkDate]);
 
   const loadReports = async () => {
     setLoading(true);
     try {
-      const data = await api.hourlyReports(`work_date=${workDate}`);
+      const data = await api.hourlyReports(`work_date=${appliedWorkDate}`);
       setReports(data);
     } catch (err) {
       console.error(err);
@@ -32,7 +33,7 @@ export function HourlyReportsPage({ user }) {
       if (!exists) {
         newSlots.push({
           id: `temp-${Date.now()}-${i}`,
-          work_date: workDate,
+          work_date: appliedWorkDate,
           start_time: startStr,
           end_time: `${String(i + 1).padStart(2, "0")}:00`,
           description: "",
@@ -58,7 +59,7 @@ export function HourlyReportsPage({ user }) {
       ...reports,
       {
         id: `temp-${Date.now()}`,
-        work_date: workDate,
+        work_date: appliedWorkDate,
         start_time,
         end_time,
         description: "",
@@ -118,7 +119,7 @@ export function HourlyReportsPage({ user }) {
 
   const submitDay = async () => {
     try {
-      await api.submitHourlyReports(workDate);
+      await api.submitHourlyReports(appliedWorkDate);
       loadReports();
       window.dispatchEvent(new CustomEvent("erp:notify", { detail: { message: "Reports submitted successfully!", type: "success" } }));
     } catch (err) {
@@ -130,37 +131,43 @@ export function HourlyReportsPage({ user }) {
   const hasDrafts = reports.some((r) => (r.status === "Draft" || r.status === "Saved") && !r.isNew);
 
   return (
-    <div className="crm-page reports-page">
-      <div className="page-header">
-        <div>
-          <h1>Hourly Reporting</h1>
-          <p>Log your work progress every hour.</p>
+    <div className="stack inquiries-page" style={{ padding: "0px 10px" }}>
+      <div className="inquiry-command-bar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1 }}>
+          <label style={{ display: "flex", alignItems: "center", gap: "6px", fontSize: "12px", fontWeight: "700", color: "#475569" }}>
+            Work Date
+            <input
+              type="date"
+              value={workDate}
+              onChange={(e) => setWorkDate(e.target.value)}
+              className="filter-input"
+              style={{ padding: "6px 8px", border: "1px solid #cbd5e1", borderRadius: "4px", fontSize: "12px" }}
+            />
+          </label>
+          <button type="button" className="primary icon-button" onClick={() => setAppliedWorkDate(workDate)} style={{ backgroundColor: "#176b5b", color: "#fff", display: "flex", alignItems: "center", gap: "6px", height: "30px", padding: "0 14px", borderRadius: "6px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "600" }}>
+            <Search size={14} /> Search
+          </button>
+          <button type="button" className="secondary icon-button small-action" onClick={loadReports} style={{ height: "30px", width: "30px", padding: 0, display: "flex", alignItems: "center", justifyContent: "center" }} title="Refresh">
+            <RefreshCw size={14} />
+          </button>
         </div>
-        <div className="reports-actions">
-          <input
-            type="date"
-            value={workDate}
-            onChange={(e) => setWorkDate(e.target.value)}
-            className="date-picker"
-          />
+        <div className="row-actions">
           {!loading && (
-            <button type="button" className="primary" onClick={generateTimeSlots}>
-              Auto-fill Missing Slots
+            <button type="button" className="primary icon-button" onClick={generateTimeSlots} style={{ backgroundColor: "#16a34a", color: "#fff", display: "flex", alignItems: "center", gap: "6px", height: "36px", padding: "0 14px", borderRadius: "6px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "600" }}>
+              Auto-fill Missing
             </button>
           )}
           {hasDrafts && (
-            <button type="button" className="success" onClick={submitDay}>
+            <button type="button" className="primary icon-button" onClick={submitDay} style={{ backgroundColor: "#176b5b", color: "#fff", display: "flex", alignItems: "center", gap: "6px", height: "36px", padding: "0 14px", borderRadius: "6px", border: "none", cursor: "pointer", fontSize: "12px", fontWeight: "600" }}>
               <Send size={15} /> Submit Daily Report
             </button>
           )}
         </div>
       </div>
 
-      <div className="sheet-container">
-        {loading ? (
-          <div className="loading">Loading reports...</div>
-        ) : (
-          <table className="sheet-table">
+      <div className="data-grid">
+        <div className="table-wrap">
+          <table className="company-table">
             <thead>
               <tr>
                 <th style={{ width: "120px" }}>Start Time</th>
@@ -171,91 +178,81 @@ export function HourlyReportsPage({ user }) {
               </tr>
             </thead>
             <tbody>
-              {reports.map((row) => (
-                <tr key={row.id} className={row.status === "Submitted" ? "submitted-row" : ""}>
-                  <td>
-                    <input
-                      type="time"
-                      value={row.start_time}
-                      onChange={(e) => updateRow(row.id, "start_time", e.target.value)}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="time"
-                      value={row.end_time}
-                      onChange={(e) => updateRow(row.id, "end_time", e.target.value)}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      type="text"
-                      placeholder="What did you work on?"
-                      value={row.description}
-                      onChange={(e) => updateRow(row.id, "description", e.target.value)}
-                    />
-                  </td>
-                  <td>
-                    <span className={`status-badge ${row.status.toLowerCase()}`}>
-                      {row.status}
-                    </span>
-                  </td>
-                  <td>
-                    <div className="row-actions">
-                      <button type="button" onClick={() => saveRow(row)} title="Save Draft" disabled={saving || !row.description.trim()}>
-                        <Save size={20} />
-                      </button>
-                      <button type="button" onClick={() => deleteRow(row.id, row.isNew)} title="Delete">
-                        <Trash size={20} />
-                      </button>
-                    </div>
+              {loading ? (
+                <tr><td colSpan={5} style={{ padding: "40px", textAlign: "center", color: "#64748b" }}>Loading reports...</td></tr>
+              ) : (
+                reports.map((row) => (
+                  <tr key={row.id} className={row.status === "Submitted" ? "order-placed-row" : ""}>
+                    <td>
+                      <input
+                        type="time"
+                        value={row.start_time}
+                        onChange={(e) => updateRow(row.id, "start_time", e.target.value)}
+                        className="cell-input"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="time"
+                        value={row.end_time}
+                        onChange={(e) => updateRow(row.id, "end_time", e.target.value)}
+                        className="cell-input"
+                      />
+                    </td>
+                    <td>
+                      <input
+                        type="text"
+                        placeholder="What did you work on?"
+                        value={row.description}
+                        onChange={(e) => updateRow(row.id, "description", e.target.value)}
+                        className="cell-input"
+                      />
+                    </td>
+                    <td>
+                      <span className={`status-badge ${row.status.toLowerCase()}`}>
+                        {row.status}
+                      </span>
+                    </td>
+                    <td>
+                      <div style={{ display: "flex", gap: "6px" }}>
+                        <button type="button" className="cell-icon-button" style={{ background: "#0ea5e9", opacity: (saving || !row.description.trim()) ? 0.5 : 1 }} onClick={() => saveRow(row)} title="Save Draft" disabled={saving || !row.description.trim()}>
+                          <Save size={13} />
+                        </button>
+                        <button type="button" className="cell-icon-button" style={{ background: "#dc2626" }} onClick={() => deleteRow(row.id, row.isNew)} title="Delete">
+                          <Trash size={13} />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))
+              )}
+              {!loading && (
+                <tr>
+                  <td colSpan="5">
+                    <button type="button" onClick={addRow} style={{ display: "flex", alignItems: "center", gap: "8px", padding: "8px 12px", width: "100%", border: "none", background: "transparent", color: "#176b5b", fontWeight: "600", cursor: "pointer" }}>
+                      <Plus size={16} /> Add Row
+                    </button>
                   </td>
                 </tr>
-              ))}
-              <tr>
-                <td colSpan="5">
-                  <button type="button" className="add-row-btn" onClick={addRow}>
-                    <Plus size={18} /> Add Row
-                  </button>
-                </td>
-              </tr>
+              )}
             </tbody>
           </table>
-        )}
+        </div>
       </div>
 
       <style dangerouslySetInnerHTML={{ __html: `
-        .reports-page { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
-        .page-header { display: flex; justify-content: space-between; align-items: flex-start; }
-        .page-header h1 { margin: 0; font-size: 24px; color: #0f172a; }
-        .page-header p { margin: 4px 0 0; color: #64748b; font-size: 14px; }
-        .reports-actions { display: flex; gap: 12px; align-items: center; }
-        .date-picker { padding: 8px 12px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }
+        .inquiry-command-bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; margin-bottom: 12px; background: #fff; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04); }
+        .row-actions { display: flex; align-items: center; gap: 8px; }
         
-        .sheet-container { background: #fff; border-radius: 12px; border: 1px solid #e2e8f0; overflow: hidden; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); }
-        .sheet-table { width: 100%; border-collapse: collapse; text-align: left; }
-        .sheet-table th { background: #f8fafc; padding: 12px 16px; font-size: 13px; font-weight: 600; color: #475569; border-bottom: 1px solid #e2e8f0; }
-        .sheet-table td { padding: 8px 16px; border-bottom: 1px solid #f1f5f9; }
-        .sheet-table input { width: 100%; padding: 8px 10px; border: 1px solid transparent; border-radius: 6px; font: inherit; background: transparent; transition: all 0.2s; }
-        .sheet-table input:hover:not(:disabled) { border-color: #cbd5e1; background: #fff; }
-        .sheet-table input:focus:not(:disabled) { border-color: #3b82f6; background: #fff; outline: none; box-shadow: 0 0 0 2px rgba(59,130,246,0.1); }
-        .sheet-table input:disabled { color: #64748b; cursor: not-allowed; }
+        .cell-input { padding: 6px 8px; border: 1px solid transparent; border-radius: 4px; font-size: 13px; font-family: inherit; background: transparent; transition: all 0.2s; width: 100%; box-sizing: border-box; }
+        .cell-input:hover:not(:disabled) { border-color: #cbd5e1; background: #fff; }
+        .cell-input:focus:not(:disabled) { border-color: #176b5b; background: #fff; outline: none; }
+        .cell-input:disabled { color: #64748b; cursor: not-allowed; }
         
-        .submitted-row td { background: #f8fafc; }
-        .status-badge { display: inline-block; padding: 4px 8px; border-radius: 99px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
+        .status-badge { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; }
         .status-badge.draft { background: #f1f5f9; color: #64748b; }
         .status-badge.saved { background: #fef3c7; color: #d97706; }
         .status-badge.submitted { background: #dcfce7; color: #166534; }
-        
-        .row-actions { display: flex; gap: 6px; }
-        .row-actions button { display: flex; align-items: center; justify-content: center; width: 38px; height: 38px; border-radius: 6px; border: none; background: transparent; cursor: pointer; color: #64748b; transition: all 0.2s; }
-        .row-actions button:hover:not(:disabled) { background: #f1f5f9; color: #0f172a; }
-        .row-actions button:disabled { opacity: 0.5; cursor: not-allowed; }
-        
-        .add-row-btn { display: flex; align-items: center; gap: 8px; padding: 12px; width: 100%; border: none; background: transparent; color: #3b82f6; font-weight: 600; cursor: pointer; transition: background 0.2s; }
-        .add-row-btn:hover { background: #f8fafc; }
-        
-        .loading { padding: 40px; text-align: center; color: #64748b; }
       ` }} />
     </div>
   );

@@ -161,6 +161,20 @@ export function AppLayout({ page, setPage }) {
     : (timeLog?.status === "on_break" ? elapsedSinceFetch : 0);
   const workSeconds = liveTimeSeconds(timeLog, fetchTime) + (timeTick * 0);
 
+  const handleLogout = async () => {
+    try {
+      const { has_pending } = await api.checkPendingReports();
+      if (has_pending) {
+        window.dispatchEvent(new CustomEvent("erp:notify", { detail: { message: "Please submit your daily reports before logging out.", type: "error" } }));
+        setPage("hourly-reports");
+        return;
+      }
+    } catch (err) {
+      console.error(err);
+    }
+    logout();
+  };
+
   return (
     <div className={`app ${navCollapsed ? "nav-collapsed" : ""}`}>
       <aside>
@@ -208,19 +222,6 @@ export function AppLayout({ page, setPage }) {
               </button>
             );
           })}
-          <button onClick={async () => {
-            try {
-              const { has_pending } = await api.checkPendingReports();
-              if (has_pending) {
-                window.dispatchEvent(new CustomEvent("erp:notify", { detail: { message: "Please submit your daily reports before logging out.", type: "error" } }));
-                setPage("hourly-reports");
-                return;
-              }
-            } catch (err) {
-              console.error(err);
-            }
-            logout();
-          }} title="Logout"><LogOut size={16} /><span>Logout</span><ChevronRight size={15} /></button>
         </nav>
         <button type="button" className="sidebar-footer" onClick={() => setNavCollapsed((current) => !current)} title={navCollapsed ? "Open menu" : "Close menu"}>
           <ChevronsLeft size={18} />
@@ -255,6 +256,14 @@ export function AppLayout({ page, setPage }) {
               )}
               <strong>{user.name}</strong>
             </div>
+            <button 
+              type="button" 
+              onClick={handleLogout} 
+              title="Logout" 
+              style={{ color: '#ef4444', border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', display: 'flex', alignItems: 'center' }}
+            >
+              <LogOut size={18} />
+            </button>
           </div>
         </header>
         <CurrentPage

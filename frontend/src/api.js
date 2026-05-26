@@ -124,6 +124,7 @@ export const api = {
   myTimeLogs: (q = "") => request(`/time/my${q ? `?${q}` : ""}`),
   userTimeLogs: (q = "") => request(`/time/users${q ? `?${q}` : ""}`),
   markTimeLogout: () => request("/time/logout", { method: "POST" }),
+  timeResume: () => request("/time/resume", { method: "POST" }),
   startBreak: () => request("/time/break/start", { method: "POST" }),
   endBreak: () => request("/time/break/end", { method: "POST" }),
   // Hourly Reporting

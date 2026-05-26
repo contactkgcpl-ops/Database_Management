@@ -34,6 +34,7 @@ const pageMap = {
   "my-leads": MyLeadsPage,
   "today-followup": FollowUpsPage,
   inquiries: InquiriesPage,
+  tasks: RequirementsPage,
   requirements: RequirementsPage,
   "my-time": (props) => <TimeTrackingPage {...props} mode="my" />,
   "user-time": (props) => <TimeTrackingPage {...props} mode="users" />,

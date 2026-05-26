@@ -64,8 +64,54 @@ def dashboard_stats(
         )
         staff_logged_today = staff_logged_today.filter(UserTimeLog.user_id.in_(user_ids))
 
+    # Calculate pending requirements breakdown by user
+    user_query = db.query(User).filter(User.is_active.is_(True))
+    if not full_access:
+        user_query = user_query.filter(User.id.in_(user_ids))
+    users_list = user_query.all()
+
+    pending_counts_query = db.query(
+        Requirement.assigned_to_id,
+        func.count(Requirement.id)
+    ).filter(
+        or_(
+            Requirement.status.is_(None),
+            func.lower(Requirement.status).notin_(["done", "closed"]),
+        )
+    )
+
+    if not full_access:
+        pending_counts_query = pending_counts_query.filter(
+            or_(
+                Requirement.added_by_id == user.id,
+                Requirement.assigned_to_id.in_(user_ids),
+            )
+        )
+
+    pending_counts = pending_counts_query.group_by(Requirement.assigned_to_id).all()
+    counts_map = {uid: count for uid, count in pending_counts}
+
+    pending_by_user = []
+    for u in users_list:
+        pending_by_user.append({
+            "user_id": u.id,
+            "user_name": u.name,
+            "pending_count": counts_map.get(u.id, 0)
+        })
+
+    unassigned_count = counts_map.get(None, 0)
+    if unassigned_count > 0:
+        pending_by_user.append({
+            "user_id": None,
+            "user_name": "Unassigned",
+            "pending_count": unassigned_count
+        })
+
+    pending_by_user = sorted(pending_by_user, key=lambda x: x["pending_count"], reverse=True)
+
     return {
         "pending_requirements": pending_requirements.count(),
         "total_inquiries": inquiries.count(),
         "staff_logged_today": staff_logged_today.scalar() or 0,
+        "pending_by_user": pending_by_user,
     }

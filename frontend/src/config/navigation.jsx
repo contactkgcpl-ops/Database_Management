@@ -50,14 +50,7 @@ export const navigation = [
       { key: "team-reports", label: "Team Reports", icon: Users, page: "team-reports", permission: "time.manage" },
     ],
   },
-  {
-    key: "operations",
-    label: "Operations",
-    icon: ClipboardList,
-    children: [
-      { key: "requirements", label: "Requirements", icon: ClipboardList, page: "requirements", permission: "requirement.view" },
-    ],
-  },
+  { key: "tasks", label: "Task", icon: ClipboardList, page: "tasks", permission: "requirement.view" },
 ];
 
 export const flatNavigation = navigation.flatMap((item) => item.children || [item]);

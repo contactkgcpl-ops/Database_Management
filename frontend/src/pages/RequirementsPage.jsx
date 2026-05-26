@@ -21,17 +21,17 @@ const PRIORITIES = ["Low", "Medium", "High", "Urgent"];
 const STATUSES = ["Open", "In Progress", "Done", "Closed"];
 
 const PRIORITY_STYLE = {
-  Low:    { background: "#eff6ff", color: "#1d4ed8" },
+  Low: { background: "#eff6ff", color: "#1d4ed8" },
   Medium: { background: "#fffbeb", color: "#b45309" },
-  High:   { background: "#fef2f2", color: "#b91c1c" },
+  High: { background: "#fef2f2", color: "#b91c1c" },
   Urgent: { background: "#f5f3ff", color: "#6d28d9" },
 };
 
 const STATUS_STYLE = {
-  Open:         { background: "#eff6ff", color: "#1d4ed8" },
-  "In Progress":{ background: "#fffbeb", color: "#b45309" },
-  Done:         { background: "#f0fdf4", color: "#166534" },
-  Closed:       { background: "#f1f5f9", color: "#475569" },
+  Open: { background: "#eff6ff", color: "#1d4ed8" },
+  "In Progress": { background: "#fffbeb", color: "#b45309" },
+  Done: { background: "#f0fdf4", color: "#166534" },
+  Closed: { background: "#f1f5f9", color: "#475569" },
 };
 
 function formatDate(val) {
@@ -173,7 +173,7 @@ function RequirementModal({ open, onClose, onSaved, editData, users, notify }) {
               Cancel
             </button>
             <button type="submit" disabled={saving} style={{ backgroundColor: "#176b5b", color: "#fff", padding: "8px 18px", borderRadius: "6px", border: "none", cursor: "pointer", fontWeight: "600", display: "flex", alignItems: "center", gap: "6px" }}>
-              {editData ? "Save Changes" : "Add Requirement"}
+              {editData ? "Save Changes" : "Add Task"}
             </button>
           </div>
         </form>
@@ -277,7 +277,7 @@ function DetailModal({ open, onClose, req, onComplete, onEdit, currentUserId, no
             {/* Footer actions for Details side */}
             <div style={{ padding: "14px 20px", borderTop: "1px solid #e2e8f0", backgroundColor: "#f8fafc", display: "flex", gap: "10px", justifyContent: "flex-start", flexWrap: "wrap", flexShrink: 0 }}>
               <button type="button" className="secondary" onClick={onClose} style={{ padding: "8px 14px", borderRadius: "6px" }}>Close</button>
-              
+
               {(isCreator || isAssignee || isAdmin) && (
                 <button type="button" className="secondary" onClick={() => { onClose(); onEdit(req); }} style={{ padding: "8px 14px", borderRadius: "6px", display: "flex", alignItems: "center", gap: "5px" }}>
                   <Pencil size={13} /> Edit
@@ -303,7 +303,7 @@ function DetailModal({ open, onClose, req, onComplete, onEdit, currentUserId, no
             <div ref={chatRef} style={{ flex: 1, overflowY: "auto", padding: "20px", display: "flex", flexDirection: "column", gap: "12px" }}>
               {(req.history || []).map((h, i) => {
                 const isMe = h.user?.id === currentUserId;
-                
+
                 if (h.type !== "comment") {
                   return (
                     <div key={i} style={{ display: "flex", justifyContent: "center", margin: "10px 0" }}>
@@ -317,7 +317,7 @@ function DetailModal({ open, onClose, req, onComplete, onEdit, currentUserId, no
                 return (
                   <div key={i} style={{ display: "flex", flexDirection: "column", alignItems: isMe ? "flex-end" : "flex-start" }}>
                     <div style={{ fontSize: "11px", color: "#64748b", marginBottom: "2px", fontWeight: "600", padding: "0 4px" }}>
-                      {isMe ? "You" : h.user?.name} • {new Date(h.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                      {isMe ? "You" : h.user?.name} • {new Date(h.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                     </div>
                     <div style={{
                       background: isMe ? "#176b5b" : "#fff",
@@ -343,15 +343,15 @@ function DetailModal({ open, onClose, req, onComplete, onEdit, currentUserId, no
             {/* Chat Input */}
             <div style={{ padding: "14px 20px", backgroundColor: "#fff", borderTop: "1px solid #e2e8f0", flexShrink: 0 }}>
               <form onSubmit={handleSendComment} style={{ display: "flex", gap: "10px" }}>
-                <input 
-                  type="text" 
-                  placeholder="Type a comment..." 
-                  value={comment} 
+                <input
+                  type="text"
+                  placeholder="Type a comment..."
+                  value={comment}
                   onChange={e => setComment(e.target.value)}
                   style={{ flex: 1, padding: "10px 14px", border: "1px solid #cbd5e1", borderRadius: "20px", outline: "none", fontSize: "14px" }}
                 />
-                <button 
-                  type="submit" 
+                <button
+                  type="submit"
                   disabled={sending || !comment.trim()}
                   style={{ backgroundColor: "#176b5b", color: "#fff", padding: "0 18px", borderRadius: "20px", border: "none", cursor: comment.trim() && !sending ? "pointer" : "not-allowed", fontWeight: "600", opacity: (comment.trim() && !sending) ? 1 : 0.6 }}
                 >
@@ -401,7 +401,7 @@ export function RequirementsPage() {
       await api.completeRequirement(id);
       notify("Requirement marked as complete!", "success");
       requirements.reload();
-    } catch {/* ignore */}
+    } catch {/* ignore */ }
   }
 
   async function handleDelete(id) {
@@ -410,22 +410,22 @@ export function RequirementsPage() {
       await api.deleteRequirement(id);
       notify("Requirement deleted", "success");
       requirements.reload();
-    } catch {/* ignore */}
+    } catch {/* ignore */ }
   }
 
   // Filter & Sort
   const filtered = useMemo(() => {
     let list = requirements.data || [];
-    
+
     // Status Tab Filter
     if (statusFilter !== "all") {
       list = list.filter(r => r.status.toLowerCase().replace(/ /g, "_") === statusFilter);
     }
-    
+
     // Search Box Filter
     if (q) {
       const qLower = q.toLowerCase();
-      list = list.filter(r => 
+      list = list.filter(r =>
         r.title.toLowerCase().includes(qLower) ||
         (r.description || "").toLowerCase().includes(qLower) ||
         (r.added_by?.name || "").toLowerCase().includes(qLower) ||
@@ -438,7 +438,7 @@ export function RequirementsPage() {
       return columns.every(col => {
         const filter = columnFilters[col.key];
         if (!filter || (Array.isArray(filter) && filter.length === 0)) return true;
-        
+
         let val = "";
         if (col.key === "id") val = `REQ-${r.id}`;
         else if (col.key === "title") val = r.title;
@@ -447,9 +447,9 @@ export function RequirementsPage() {
         else if (col.key === "added_by") val = r.added_by?.name || "";
         else if (col.key === "assigned_to") val = r.assigned_to?.name || "Unassigned";
         else if (col.key === "due_date") val = r.due_date ? formatDate(r.due_date) : "";
-        
+
         val = val.toLowerCase();
-        
+
         if (Array.isArray(filter)) {
           const valueAtoms = val.split(",").map(s => s.trim());
           return filter.some(f => valueAtoms.includes(String(f).toLowerCase()) || val.includes(String(f).toLowerCase()));
@@ -469,7 +469,7 @@ export function RequirementsPage() {
       else if (sort.key === "added_by") { valA = a.added_by?.name || ""; valB = b.added_by?.name || ""; }
       else if (sort.key === "assigned_to") { valA = a.assigned_to?.name || "Unassigned"; valB = b.assigned_to?.name || "Unassigned"; }
       else if (sort.key === "due_date") { valA = a.due_date ? new Date(a.due_date).getTime() : 0; valB = b.due_date ? new Date(b.due_date).getTime() : 0; }
-      
+
       const res = typeof valA === "number" && typeof valB === "number" ? valA - valB : String(valA).localeCompare(String(valB), undefined, { numeric: true });
       return sort.direction === "asc" ? res : -res;
     });
@@ -503,14 +503,14 @@ export function RequirementsPage() {
 
   return (
     <div className="stack requirements-page" style={{ padding: "0px 10px" }}>
-      
+
       {/* ── Command Bar ── */}
       <div className="inquiry-command-bar">
         <div style={{ display: "flex", alignItems: "center", gap: "10px", flex: 1 }}>
           <label className="crm-search small inquiry-search" style={{ flex: 1, maxWidth: "360px" }}>
             <Search size={15} />
             <input
-              placeholder="Search requirements..."
+              placeholder="Search Task..."
               value={q}
               onChange={e => { setQ(e.target.value); setPage(1); }}
             />
@@ -532,7 +532,7 @@ export function RequirementsPage() {
             onClick={() => { setEditReq(null); setShowAddModal(true); }}
             style={{ backgroundColor: "#176b5b", color: "#fff", display: "flex", alignItems: "center", gap: "6px", height: "36px", padding: "0 14px", borderRadius: "6px" }}
           >
-            <Plus size={16} /> Add Requirement
+            <Plus size={16} /> Add Task
           </button>
         </div>
       </div>
@@ -573,7 +573,7 @@ export function RequirementsPage() {
                     ))}
                     <th style={{ width: "100px" }}>Action</th>
                   </tr>
-                  
+
                   {/* Header Filter Row */}
                   <tr className="filter-row">
                     {columns.map(col => {
@@ -587,9 +587,9 @@ export function RequirementsPage() {
                         if (col.key === "due_date") return r.due_date ? formatDate(r.due_date) : "";
                         return "";
                       }).filter(Boolean);
-                      
+
                       const uniqueValues = Array.from(new Set(dataValues)).sort();
-                      
+
                       return (
                         <th key={`${col.key}-f`} style={{ padding: "6px 8px" }}>
                           {["priority", "status", "assigned_to"].includes(col.key) ? (
@@ -746,7 +746,7 @@ export function RequirementsPage() {
         notify={notify}
         onReload={() => requirements.reload()}
       />
-    {/* Styled tokens tailored to base theme */}
+      {/* Styled tokens tailored to base theme */}
       <style dangerouslySetInnerHTML={{
         __html: `
         .requirements-page { gap: 0px; }

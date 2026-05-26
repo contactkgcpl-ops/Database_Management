@@ -290,3 +290,22 @@ class HourlyReport(Base, TimestampMixin):
     status: Mapped[str] = mapped_column(String(20), default="Draft") # Draft, Submitted
 
     user: Mapped[User] = relationship()
+
+
+class GlobalChatMessage(Base, TimestampMixin):
+    __tablename__ = "global_chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    message: Mapped[str] = mapped_column(Text)
+    
+    user: Mapped[User | None] = relationship()
+
+
+class UserChatState(Base, TimestampMixin):
+    __tablename__ = "user_chat_states"
+
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    last_read_message_id: Mapped[int | None] = mapped_column(Integer, default=0)
+
+    user: Mapped[User] = relationship()

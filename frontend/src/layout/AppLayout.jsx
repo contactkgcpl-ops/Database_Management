@@ -20,6 +20,7 @@ import { TimeTrackingPage } from "../pages/TimeTrackingPage";
 import { HourlyReportsPage } from "../pages/HourlyReportsPage";
 import { TeamReportsPage } from "../pages/TeamReportsPage";
 import { NotificationBell } from "../components/NotificationBell";
+import { GlobalChat } from "../components/GlobalChat";
 
 const pageMap = {
   dashboard: DashboardPage,
@@ -284,6 +285,7 @@ export function AppLayout({ page, setPage }) {
             </div>
           </div>
         )}
+        <GlobalChat />
       </section>
       <style dangerouslySetInnerHTML={{ __html: `
         .time-chip, .break-button {

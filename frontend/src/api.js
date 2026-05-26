@@ -135,4 +135,9 @@ export const api = {
   deleteHourlyReport: (id) => request(`/reporting/${id}`, { method: "DELETE" }),
   submitHourlyReports: (workDate) => request(`/reporting/submit?work_date=${workDate}`, { method: "POST" }),
   checkPendingReports: () => request("/reporting/check-pending"),
+  // Chat
+  getChatMessages: () => request("/chat"),
+  sendChatMessage: (message) => request("/chat", { method: "POST", body: JSON.stringify({ message }) }),
+  getChatUnreadCount: () => request("/chat/unread"),
+  markChatRead: () => request("/chat/read", { method: "POST" }),
 };

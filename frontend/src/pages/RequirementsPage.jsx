@@ -385,9 +385,6 @@ export function RequirementsPage() {
   const requirements = useLoad(() => api.requirements(), []);
   const users = useLoad(() => api.users(), []);
   const activeUsers = (users.data || []).filter(u => u.is_active);
-  
-  const canAssignToOthers = user?.role?.name === "Admin" || user?.permissions?.includes("users.manage");
-  const assignableUsers = canAssignToOthers ? activeUsers : activeUsers.filter(u => u.id === user?.id);
 
   // Sync viewReq when requirements data updates (e.g. after a comment is added)
   React.useEffect(() => {
@@ -736,7 +733,7 @@ export function RequirementsPage() {
         onClose={() => setShowAddModal(false)}
         onSaved={() => requirements.reload()}
         editData={editReq}
-        users={assignableUsers}
+        users={activeUsers}
         notify={notify}
       />
       <DetailModal

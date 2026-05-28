@@ -25,7 +25,7 @@ def list_companies(db: Session, q: str | None = None) -> list[Company]:
     if q:
         term = f"%{q.strip()}%"
         query = query.filter(Company.company_name.ilike(term))
-    return query.limit(500).all()
+    return query.all()
 
 def get_company(db: Session, company_id: int) -> Company | None:
     return company_query(db).filter(Company.id == company_id).first()
@@ -160,6 +160,13 @@ def assign_company(db: Session, company: Company, user_id: int | None, assigned_
             user_id=assigned_by_id
         )
         db.add(history)
+        
+    # Update any pending/re-follow-up records to ensure they match the assignee
+    from app.models import LeadFollowUp
+    db.query(LeadFollowUp).filter(
+        LeadFollowUp.company_id == company.id,
+        LeadFollowUp.status.in_(["Pending", "Re Follow Up"])
+    ).update({"assigned_to_id": user_id}, synchronize_session=False)
     
     db.commit()
 
@@ -215,8 +222,11 @@ def to_company_out(db: Session, company: Company, for_user_id: int | None = None
 
     # Get latest assignment info
     assignment = None
-    if for_user_id:
-        assignment = next((a for a in company.lead_assignments if a.assigned_to_id == for_user_id), None)
+    if for_user_id is not None:
+        if isinstance(for_user_id, (list, tuple, set)):
+            assignment = next((a for a in company.lead_assignments if a.assigned_to_id in for_user_id), None)
+        else:
+            assignment = next((a for a in company.lead_assignments if a.assigned_to_id == for_user_id), None)
     
     if not assignment:
         assignment = company.lead_assignments[0] if company.lead_assignments else None

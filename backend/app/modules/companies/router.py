@@ -36,13 +36,14 @@ def list_my_leads(
     db: Session = Depends(get_db),
     user: User = Depends(require_any_permission("companies.view", "leads.my")),
 ):
-    # Filter list_companies result or add a new service method
-    # For now, I'll filter manually or update list_companies
     from app.models import LeadManage
     import traceback
     try:
+        child_ids = [row.id for row in db.query(User.id).filter(User.parent_id == user.id).all()]
+        allowed_user_ids = [user.id] + child_ids
+
         query = db.query(Company).join(LeadManage, Company.id == LeadManage.company_id).filter(
-            LeadManage.assigned_to_id == user.id,
+            LeadManage.assigned_to_id.in_(allowed_user_ids),
             LeadManage.is_inquiry != True
         )
         if q:
@@ -55,7 +56,7 @@ def list_my_leads(
         results = []
         for c in companies_list:
             try:
-                results.append(to_company_out(db, c, for_user_id=user.id))
+                results.append(to_company_out(db, c, for_user_id=allowed_user_ids))
             except Exception as e:
                 print(f"ERROR transforming company {c.id}: {e}")
                 traceback.print_exc()
@@ -138,11 +139,27 @@ def assign_company_record(
     company_id: int,
     user_id: int | None = None,
     db: Session = Depends(get_db),
-    user: User = Depends(require_any_permission("companies.manage", "leads.assign")),
+    user: User = Depends(require_any_permission("companies.manage", "leads.assign", "leads.my", "leads.followup")),
 ):
     company = get_company(db, company_id)
     if not company:
         raise HTTPException(status_code=404, detail="Company not found")
+        
+    from app.deps import user_permission_codes
+    user_perms = user_permission_codes(user)
+    has_manage_permission = any(p in user_perms for p in ["companies.manage", "leads.assign"])
+    
+    if not has_manage_permission:
+        from app.models import LeadManage
+        assignment = db.query(LeadManage).filter(LeadManage.company_id == company_id).first()
+        current_assignee = assignment.assigned_to_id if assignment else None
+        
+        child_ids = [row.id for row in db.query(User.id).filter(User.parent_id == user.id).all()]
+        allowed_user_ids = [user.id] + child_ids
+        
+        if current_assignee not in allowed_user_ids:
+            raise HTTPException(status_code=403, detail="You are not authorized to assign this lead.")
+
     company = assign_company(db, company, user_id, assigned_by_id=user.id)
     return to_company_out(db, company)
 

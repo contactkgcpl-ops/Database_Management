@@ -144,7 +144,7 @@ def list_inquiries(db: Session, q: str | None, user: User):
                 literal_column("lead_manage.inquiry_source").ilike(term),
             )
         )
-    return [to_company_out(db, company, for_user_id=user.id) for company in query.order_by(Company.id.desc()).limit(500).all()]
+    return [to_company_out(db, company, for_user_id=user.id) for company in query.order_by(Company.id.desc()).all()]
 
 
 def create_inquiry(db: Session, payload, user: User) -> Company:
@@ -215,6 +215,13 @@ def assign_inquiry(db: Session, company_id: int, user_id: int | None, user: User
     assignment.assigned_to_id = user_id
     assignment.assigned_by_id = user.id
     _record_history(db, company_id, "assigned_to", "Assigned To", old_value, str(user_id or ""), user.id, "Inquiry owner changed")
+    
+    # Update pending follow-ups to the new assignee
+    db.query(LeadFollowUp).filter(
+        LeadFollowUp.company_id == company_id,
+        LeadFollowUp.status.in_(["Pending", "Re Follow Up"])
+    ).update({"assigned_to_id": user_id}, synchronize_session=False)
+    
     db.commit()
     return get_company(db, company_id)
 

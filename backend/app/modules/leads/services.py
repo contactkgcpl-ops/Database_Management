@@ -3,13 +3,19 @@ from sqlalchemy.orm import Session
 from app.models import Company, LeadManage, Property, User, CompanyPropertyValue
 from app.modules.companies.services import to_company_out, company_query
 
-def list_leads(db: Session, q: str | None = None, assigned_to: int | None = None) -> list[Company]:
-    query = db.query(Company).join(LeadManage).filter(LeadManage.assigned_to_id == assigned_to)
+def list_leads(db: Session, q: str | None = None, assigned_to: int | list[int] | None = None) -> list[Company]:
+    query = db.query(Company).join(LeadManage)
+    if assigned_to is not None:
+        if isinstance(assigned_to, list):
+            query = query.filter(LeadManage.assigned_to_id.in_(assigned_to))
+        else:
+            query = query.filter(LeadManage.assigned_to_id == assigned_to)
+            
     if q:
         term = f"%{q.strip()}%"
         query = query.filter(Company.company_name.ilike(term))
     
-    companies = query.order_by(Company.id.desc()).limit(500).all()
+    companies = query.order_by(Company.id.desc()).all()
     # We need to make sure to_company_out uses the CORRECT assignment for this user
     return companies
 

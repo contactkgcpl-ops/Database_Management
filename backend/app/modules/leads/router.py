@@ -69,8 +69,11 @@ def get_my_leads(
     db: Session = Depends(get_db),
     user: User = Depends(require_any_permission("companies.view", "leads.my")),
 ):
-    companies = list_leads(db, q, assigned_to=user.id)
-    return [to_company_out(db, company, for_user_id=user.id) for company in companies]
+    child_ids = [row.id for row in db.query(User.id).filter(User.parent_id == user.id).all()]
+    allowed_user_ids = [user.id] + child_ids
+
+    companies = list_leads(db, q, assigned_to=allowed_user_ids)
+    return [to_company_out(db, company, for_user_id=allowed_user_ids) for company in companies]
 
 @router.post("", response_model=CompanyOut)
 def create_new_lead(
@@ -94,10 +97,13 @@ def get_my_pending_followups(
     db: Session = Depends(get_db),
     user: User = Depends(require_any_permission("companies.view", "leads.my", "leads.followup")),
 ):
+    child_ids = [row.id for row in db.query(User.id).filter(User.parent_id == user.id).all()]
+    allowed_user_ids = [user.id] + child_ids
+
     followups = db.query(LeadFollowUp).join(
         LeadManage, LeadFollowUp.company_id == LeadManage.company_id
     ).filter(
-        LeadFollowUp.assigned_to_id == user.id,
+        LeadFollowUp.assigned_to_id.in_(allowed_user_ids),
         LeadFollowUp.status.in_(["Pending", "Re Follow Up"]),
         LeadManage.is_inquiry.isnot(True)
     ).order_by(LeadFollowUp.scheduled_date.asc()).all()
@@ -144,6 +150,10 @@ def complete_followup(
             assignment.assigned_to_id = requested_assignee_id
             assignment.assigned_by_id = user.id
             assignee_id = requested_assignee_id
+            
+            # Update current followup's assignee
+            followup.assigned_to_id = requested_assignee_id
+            
             db.add(LeadHistory(
                 company_id=followup.company_id,
                 property_key="assigned_to",
@@ -153,6 +163,13 @@ def complete_followup(
                 remark=payload.get("remark"),
                 user_id=user.id,
             ))
+            
+            # Also update other pending follow-ups for this company
+            db.query(LeadFollowUp).filter(
+                LeadFollowUp.company_id == followup.company_id,
+                LeadFollowUp.status.in_(["Pending", "Re Follow Up"]),
+                LeadFollowUp.id != followup.id
+            ).update({"assigned_to_id": requested_assignee_id}, synchronize_session=False)
 
     if lead_status and assignment.status != lead_status:
         old_status = assignment.status or ""

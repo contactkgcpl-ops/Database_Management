@@ -151,8 +151,19 @@ def remove_profile_image(image_url: str | None) -> None:
 
 
 @router.get("", response_model=list[UserOut])
-def list_users(db: Session = Depends(get_db), _: User = Depends(require_any_permission(USER_LIST_PERMISSIONS))):
-    return [serialize_user(user) for user in db.query(User).order_by(User.id.desc()).all()]
+def list_users(db: Session = Depends(get_db), current_user: User = Depends(require_any_permission(USER_LIST_PERMISSIONS))):
+    from app.modules.tasks.services import get_descendant_ids, get_ancestor_ids
+    
+    is_admin = current_user.role.name == "Admin" if current_user.role else False
+    if is_admin:
+        users = db.query(User).order_by(User.id.desc()).all()
+    else:
+        descendants = get_descendant_ids(db, current_user.id)
+        ancestors = get_ancestor_ids(db, current_user.id)
+        related_ids = descendants.union(ancestors)
+        users = db.query(User).filter(User.id.in_(related_ids)).order_by(User.id.desc()).all()
+        
+    return [serialize_user(user) for user in users]
 
 
 @router.post("", response_model=UserOut)

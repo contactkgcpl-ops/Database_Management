@@ -65,11 +65,10 @@ def get_tasks(
     assigned_to_id: int | None = None,
     due_date: str | None = None
 ) -> list[Task]:
-    # Check permissions
-    from app.deps import user_permission_codes
-    has_manage = "tasks.manage" in user_permission_codes(current_user)
+    # Only Admin gets full task access; other roles are restricted to hierarchy
+    is_admin = current_user.role.name == "Admin" if current_user.role else False
     
-    if has_manage:
+    if is_admin:
         query = db.query(Task)
     else:
         descendants = get_descendant_ids(db, current_user.id)
@@ -116,11 +115,10 @@ def get_task_stats(
     assigned_to_id: int | None = None,
     due_date: str | None = None
 ) -> dict:
-    # Check permissions
-    from app.deps import user_permission_codes
-    has_manage = "tasks.manage" in user_permission_codes(current_user)
+    # Only Admin gets full task stats access; other roles are restricted to hierarchy
+    is_admin = current_user.role.name == "Admin" if current_user.role else False
     
-    if has_manage:
+    if is_admin:
         query = db.query(Task)
     else:
         descendants = get_descendant_ids(db, current_user.id)
@@ -355,7 +353,7 @@ def add_task_comment(db: Session, task_id: int, current_user: User, comment_text
     return comment
 
 
-def get_staff_report(db: Session, work_date, user_ids: list[int] | None = None) -> list[dict]:
+def get_staff_report(db: Session, work_date, user_ids: list[int] | None = None, current_user: User | None = None) -> list[dict]:
     from datetime import date, time, datetime
     
     # Start and End of the day D in UTC timezone
@@ -364,6 +362,14 @@ def get_staff_report(db: Session, work_date, user_ids: list[int] | None = None) 
     
     # Query active users
     query_users = db.query(User).filter(User.is_active == True)
+    
+    # Restrict report users list to descendants for non-Admins
+    if current_user:
+        is_admin = current_user.role.name == "Admin" if current_user.role else False
+        if not is_admin:
+            descendants = get_descendant_ids(db, current_user.id)
+            query_users = query_users.filter(User.id.in_(descendants))
+            
     if user_ids:
         query_users = query_users.filter(User.id.in_(user_ids))
     users = query_users.order_by(User.name).all()

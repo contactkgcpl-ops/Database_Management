@@ -286,4 +286,4 @@ def get_staff_report(
     if user_ids:
         parsed_user_ids = [int(x) for x in user_ids.split(",") if x.strip().isdigit()]
         
-    return services.get_staff_report(db, target_date, parsed_user_ids)
+    return services.get_staff_report(db, target_date, parsed_user_ids, current_user=user)

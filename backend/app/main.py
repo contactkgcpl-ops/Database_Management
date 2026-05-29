@@ -19,6 +19,7 @@ from app.modules.time_tracking import router as time_tracking
 from app.modules.dashboard import router as dashboard
 from app.modules.reporting import router as reporting
 from app.modules.chat import router as chat
+from app.modules.tasks import router as tasks
 from app.seed import seed_defaults
 
 settings = get_settings()
@@ -65,3 +66,4 @@ app.include_router(time_tracking.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(reporting.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
+app.include_router(tasks.router, prefix="/api")

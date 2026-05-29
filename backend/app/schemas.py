@@ -314,3 +314,97 @@ class HourlyReportOut(BaseModel):
     updated_at: datetime
     
     model_config = ConfigDict(from_attributes=True)
+
+
+# --- Task Management ---
+
+class TaskUserOut(BaseModel):
+    id: int
+    name: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=255)
+    description: str | None = None
+    due_date: datetime | None = None
+    eta_hours: float = 0.0
+    assigned_to_id: int | None = None
+
+
+class TaskUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    status: str | None = None
+    due_date: datetime | None = None
+    eta_hours: float | None = None
+    assigned_to_id: int | None = None
+
+
+class TaskTimerLogOut(BaseModel):
+    id: int
+    user_id: int
+    user_name: str | None = None
+    work_type: str
+    work_description: str | None = None
+    start_time: datetime
+    end_time: datetime | None = None
+    duration_seconds: int = 0
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskHistoryOut(BaseModel):
+    id: int
+    user_id: int | None = None
+    user_name: str | None = None
+    action: str
+    details: str | None = None
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskCommentCreate(BaseModel):
+    comment: str = Field(min_length=1)
+
+
+class TaskCommentOut(BaseModel):
+    id: int
+    user_id: int
+    user_name: str | None = None
+    comment: str
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskNotificationOut(BaseModel):
+    id: int
+    task_id: int
+    task_title: str | None = None
+    user_id: int
+    type: str
+    message: str
+    is_read: bool
+    created_at: datetime
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TaskOut(BaseModel):
+    id: int
+    title: str
+    description: str | None = None
+    status: str
+    due_date: datetime | None = None
+    eta_hours: float = 0.0
+    created_by_id: int
+    created_by: TaskUserOut
+    assigned_to_id: int | None = None
+    assigned_to: TaskUserOut | None = None
+    created_at: datetime
+    updated_at: datetime
+    can_edit_details: bool = False
+    timer_logs: list[TaskTimerLogOut] = []
+    comments: list[TaskCommentOut] = []
+    history_entries: list[TaskHistoryOut] = []
+    
+    model_config = ConfigDict(from_attributes=True)
+

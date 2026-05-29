@@ -140,4 +140,32 @@ export const api = {
   sendChatMessage: (message) => request("/chat", { method: "POST", body: JSON.stringify({ message }) }),
   getChatUnreadCount: () => request("/chat/unread"),
   markChatRead: () => request("/chat/read", { method: "POST" }),
+  // Tasks
+  tasks: (params = {}) => {
+    const q = new URLSearchParams(
+      Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== "" && v !== "All")
+    ).toString();
+    return request(`/tasks${q ? `?${q}` : ""}`);
+  },
+  taskStats: (params = {}) => {
+    const q = new URLSearchParams(
+      Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== "" && v !== "All")
+    ).toString();
+    return request(`/tasks/stats${q ? `?${q}` : ""}`);
+  },
+  taskDetails: (id) => request(`/tasks/${id}`),
+  createTask: (data) => request("/tasks", { method: "POST", body: JSON.stringify(data) }),
+  updateTask: (id, data) => request(`/tasks/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  startTaskTimer: (id, workType) => request(`/tasks/${id}/timer/start?work_type=${encodeURIComponent(workType)}`, { method: "POST" }),
+  stopTaskTimer: (id, workDescription, workType = "") => request(`/tasks/${id}/timer/stop?work_description=${encodeURIComponent(workDescription)}${workType ? `&work_type=${encodeURIComponent(workType)}` : ""}`, { method: "POST" }),
+  addTaskComment: (id, comment) => request(`/tasks/${id}/comments`, { method: "POST", body: JSON.stringify({ comment }) }),
+  taskNotifications: () => request("/tasks/notifications"),
+  markTaskNotificationRead: (id) => request(`/tasks/notifications/${id}/read`, { method: "POST" }),
+  markAllTaskNotificationsRead: () => request("/tasks/notifications/mark-read", { method: "POST" }),
+  staffReport: (params = {}) => {
+    const q = new URLSearchParams(
+      Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== "" && v !== "All")
+    ).toString();
+    return request(`/tasks/reports/staff${q ? `?${q}` : ""}`);
+  },
 };

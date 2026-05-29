@@ -21,6 +21,8 @@ import { HourlyReportsPage } from "../pages/HourlyReportsPage";
 import { TeamReportsPage } from "../pages/TeamReportsPage";
 import { NotificationBell } from "../components/NotificationBell";
 import { GlobalChat } from "../components/GlobalChat";
+import { TasksPage } from "../pages/TasksPage";
+import { StaffReportPage } from "../pages/StaffReportPage";
 
 const pageMap = {
   dashboard: DashboardPage,
@@ -34,12 +36,13 @@ const pageMap = {
   "my-leads": MyLeadsPage,
   "today-followup": FollowUpsPage,
   inquiries: InquiriesPage,
-  tasks: RequirementsPage,
+  tasks: TasksPage,
   requirements: RequirementsPage,
   "my-time": (props) => <TimeTrackingPage {...props} mode="my" />,
   "user-time": (props) => <TimeTrackingPage {...props} mode="users" />,
   "hourly-reports": HourlyReportsPage,
   "team-reports": TeamReportsPage,
+  "staff-report": StaffReportPage,
 };
 
 function secondsToLabel(seconds = 0) {
@@ -249,7 +252,7 @@ export function AppLayout({ page, setPage }) {
                 <Coffee size={15} /> Go to Break
               </button>
             ) : null}
-            <NotificationBell onNavigateToRequirements={() => setPage("requirements")} />
+            <NotificationBell onNavigate={(dest) => setPage(dest)} />
             <div className="user-chip">
               {user.profile_image_url ? (
                 <img src={assetUrl(user.profile_image_url)} alt={user.name} className="avatar" style={{ objectFit: 'cover' }} />

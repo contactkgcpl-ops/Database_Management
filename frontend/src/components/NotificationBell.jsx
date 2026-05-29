@@ -1,20 +1,28 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import { Bell, CheckCheck, ClipboardList } from "lucide-react";
+import { Bell, CheckCheck } from "lucide-react";
 import { api } from "../api";
 
 const POLL_INTERVAL_MS = 30_000;
 
-export function NotificationBell({ onNavigateToRequirements }) {
+export function NotificationBell({ onNavigate }) {
   const [notifications, setNotifications] = useState([]);
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const data = await api.myNotifications();
-      setNotifications(data);
+      const [reqData, taskData] = await Promise.all([
+        api.myNotifications().catch(() => []),
+        api.taskNotifications().catch(() => []),
+      ]);
+      const combined = [
+        ...reqData.map((n) => ({ ...n, source: "requirement" })),
+        ...taskData.map((n) => ({ ...n, source: "task" })),
+      ];
+      combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+      setNotifications(combined);
     } catch {
-      // silently fail — don't interrupt the user
+      // silently fail
     }
   }, []);
 
@@ -38,16 +46,26 @@ export function NotificationBell({ onNavigateToRequirements }) {
 
   const handleMarkOne = async (notif) => {
     try {
-      await api.markNotificationRead(notif.id);
-      setNotifications((prev) => prev.filter((n) => n.id !== notif.id));
+      if (notif.source === "task") {
+        await api.markTaskNotificationRead(notif.id);
+        setNotifications((prev) => prev.filter((n) => !(n.id === notif.id && n.source === "task")));
+        setOpen(false);
+        if (onNavigate) onNavigate("tasks");
+      } else {
+        await api.markNotificationRead(notif.id);
+        setNotifications((prev) => prev.filter((n) => !(n.id === notif.id && n.source === "requirement")));
+        setOpen(false);
+        if (onNavigate) onNavigate("requirements");
+      }
     } catch {/* ignore */}
-    setOpen(false);
-    onNavigateToRequirements();
   };
 
   const handleMarkAll = async () => {
     try {
-      await api.markAllNotificationsRead();
+      await Promise.all([
+        api.markAllNotificationsRead().catch(() => {}),
+        api.markAllTaskNotificationsRead().catch(() => {}),
+      ]);
       setNotifications([]);
     } catch {/* ignore */}
     setOpen(false);
@@ -97,7 +115,7 @@ export function NotificationBell({ onNavigateToRequirements }) {
             ) : (
               notifications.map((notif) => (
                 <button
-                  key={notif.id}
+                  key={`${notif.source}-${notif.id}`}
                   type="button"
                   className={`notif-item notif-type-${notif.type}`}
                   onClick={() => handleMarkOne(notif)}
@@ -107,17 +125,21 @@ export function NotificationBell({ onNavigateToRequirements }) {
                   </span>
                   <div className="notif-content">
                     <span className="notif-title">
-                      {notif.type === "completed"
+                      {notif.source === "task"
+                        ? notif.message
+                        : notif.type === "completed"
                         ? `Your requirement is done!`
                         : `New requirement assigned to you`}
                     </span>
-                    <span className="notif-subtitle">{notif.requirement?.title}</span>
-                    {notif.type === "completed" && notif.requirement?.assigned_to && (
+                    <span className="notif-subtitle">
+                      {notif.source === "task" ? notif.task_title : notif.requirement?.title}
+                    </span>
+                    {notif.source === "requirement" && notif.type === "completed" && notif.requirement?.assigned_to && (
                       <span className="notif-meta">
                         Completed by {notif.requirement.assigned_to.name}
                       </span>
                     )}
-                    {notif.type === "assigned" && notif.requirement?.added_by && (
+                    {notif.source === "requirement" && notif.type === "assigned" && notif.requirement?.added_by && (
                       <span className="notif-meta">
                         From {notif.requirement.added_by.name}
                       </span>
@@ -132,3 +154,4 @@ export function NotificationBell({ onNavigateToRequirements }) {
     </div>
   );
 }
+

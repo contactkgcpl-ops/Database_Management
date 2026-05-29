@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, Float
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
@@ -309,3 +309,76 @@ class UserChatState(Base, TimestampMixin):
     last_read_message_id: Mapped[int | None] = mapped_column(Integer, default=0)
 
     user: Mapped[User] = relationship()
+
+
+class Task(Base, TimestampMixin):
+    __tablename__ = "tasks"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    title: Mapped[str] = mapped_column(String(255), index=True)
+    description: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(30), default="TODO")  # TODO, Ongoing, Hold, Completed
+    due_date: Mapped[datetime | None] = mapped_column(DateTime) # Store in UTC
+    eta_hours: Mapped[float] = mapped_column(Float, default=0.0) # Estimated hours
+    created_by_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    assigned_to_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+
+    created_by: Mapped[User] = relationship(foreign_keys=[created_by_id])
+    assigned_to: Mapped[User | None] = relationship(foreign_keys=[assigned_to_id])
+    timer_logs: Mapped[list["TaskTimerLog"]] = relationship(cascade="all, delete-orphan", back_populates="task")
+    comments: Mapped[list["TaskComment"]] = relationship(cascade="all, delete-orphan", back_populates="task")
+    history_entries: Mapped[list["TaskHistory"]] = relationship(cascade="all, delete-orphan", back_populates="task", order_by="TaskHistory.created_at")
+
+
+class TaskTimerLog(Base, TimestampMixin):
+    __tablename__ = "task_timer_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    work_type: Mapped[str] = mapped_column(String(80), default="Development") # e.g. Development, Code Review, Team Discussion
+    work_description: Mapped[str | None] = mapped_column(Text)
+    start_time: Mapped[datetime] = mapped_column(DateTime) # UTC
+    end_time: Mapped[datetime | None] = mapped_column(DateTime) # UTC (Null if active)
+
+    task: Mapped[Task] = relationship(back_populates="timer_logs")
+    user: Mapped[User] = relationship()
+
+
+class TaskHistory(Base, TimestampMixin):
+    __tablename__ = "task_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    action: Mapped[str] = mapped_column(String(100)) # e.g. "created", "status_changed", "assignee_changed", "description_updated", "timer_started", "timer_stopped"
+    details: Mapped[str | None] = mapped_column(Text) # e.g. "Changed status from TODO to Ongoing" or "Timer stopped (1h 15m)"
+
+    task: Mapped[Task] = relationship(back_populates="history_entries")
+    user: Mapped[User | None] = relationship()
+
+
+class TaskComment(Base, TimestampMixin):
+    __tablename__ = "task_comments"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    comment: Mapped[str] = mapped_column(Text)
+
+    task: Mapped[Task] = relationship(back_populates="comments")
+    user: Mapped[User] = relationship()
+
+
+class TaskNotification(Base, TimestampMixin):
+    __tablename__ = "task_notifications"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    task_id: Mapped[int] = mapped_column(ForeignKey("tasks.id", ondelete="CASCADE"), index=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)  # Recipient
+    type: Mapped[str] = mapped_column(String(30))  # "assigned", "comment", "completed"
+    message: Mapped[str] = mapped_column(Text)
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
+
+    task: Mapped[Task] = relationship()
+

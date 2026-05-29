@@ -31,6 +31,10 @@ DEFAULT_PERMISSIONS = [
     ("time.view", "View My Time", "time", "Time Tracking", 90),
     ("time.break", "Break Controls", "time", "Time Tracking", 91),
     ("time.manage", "Manage User Time", "time", "Time Tracking", 92),
+    ("tasks.view", "View Tasks", "staff-management", "Staff Management", 100),
+    ("tasks.create", "Create Tasks", "staff-management", "Staff Management", 101),
+    ("tasks.manage", "Manage Tasks", "staff-management", "Staff Management", 102),
+    ("tasks.report", "View Staff Report", "staff-management", "Staff Management", 103),
 ]
 
 DEFAULT_PROPERTIES = [

@@ -32,9 +32,6 @@ button.danger {
   background: #b42318;
 }
 
-button.active {
-  background: #0f3f37;
-}
 
 button.secondary {
   background: #edf3f1;
@@ -3477,6 +3474,7 @@ form.compact-user-form .modal-actions button {
   background-color: #f0fdf4 !important;
   color: #166534 !important;
 }
+
 .order-placed-row:hover td {
   background-color: #dcfce7 !important;
 }
@@ -3485,6 +3483,7 @@ form.compact-user-form .modal-actions button {
   background-color: #eff6ff !important;
   color: #1e40af !important;
 }
+
 .running-inquiry-row:hover td {
   background-color: #dbeafe !important;
 }
@@ -3646,11 +3645,6 @@ form.compact-user-form .modal-actions button {
   font-size: 11px;
   color: #9ca3af;
   margin-top: 2px;
-}
-
-
-
-  padding: 0;
 }
 
 .page-root {
@@ -3919,10 +3913,15 @@ form.compact-user-form .modal-actions button {
 /* ── Spin animation ── */
 
 @keyframes spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .spin {
   animation: spin 0.8s linear infinite;
-}
+}

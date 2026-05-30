@@ -50,12 +50,12 @@ export function NotificationBell({ onNavigate }) {
         await api.markTaskNotificationRead(notif.id);
         setNotifications((prev) => prev.filter((n) => !(n.id === notif.id && n.source === "task")));
         setOpen(false);
-        if (onNavigate) onNavigate("tasks");
+        if (onNavigate) onNavigate("tasks", notif.task_id);
       } else {
         await api.markNotificationRead(notif.id);
         setNotifications((prev) => prev.filter((n) => !(n.id === notif.id && n.source === "requirement")));
         setOpen(false);
-        if (onNavigate) onNavigate("requirements");
+        if (onNavigate) onNavigate("requirements", notif.requirement?.id);
       }
     } catch {/* ignore */}
   };

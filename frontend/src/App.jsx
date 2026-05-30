@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from "./context/AuthContext";
 import { NotificationProvider } from "./components/NotificationProvider";
 import { AppLayout } from "./layout/AppLayout";
 import { LoginPage } from "./pages/LoginPage";
+import { GlobalLoader } from "./components/GlobalLoader";
 
 function MainApp() {
   const { user } = useAuth();
@@ -29,6 +30,7 @@ export function App() {
     <NotificationProvider>
       <AuthProvider>
         <AppShell />
+        <GlobalLoader />
       </AuthProvider>
     </NotificationProvider>
   );

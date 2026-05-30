@@ -61,3 +61,9 @@ backend/storage/uploads/
 Thumbs.db
 .idea/
 .vscode/
+
+# Ignored project markdown and docker config files
+AGENTS.md
+README.md
+set_server.md
+docker-compose.yml

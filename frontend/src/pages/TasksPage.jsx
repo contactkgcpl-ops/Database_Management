@@ -1,18 +1,45 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { Plus, Search, RefreshCw, X, HelpCircle, CheckCircle2, Circle, AlertCircle, Play, Calendar, Clock, MoreVertical, Filter, SlidersHorizontal, ChevronDown, ClipboardList, Clipboard, Pause, Check } from "lucide-react";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 import { TaskDetailPage } from "./TaskDetailPage";
 
+function parseUTCDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return val;
+  if (typeof val === "string") {
+    let str = val.trim();
+    if (str.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(str)) {
+      return new Date(str);
+    }
+    if (str.includes(":")) {
+      if (str.includes(" ") && !str.includes("T")) {
+        str = str.replace(" ", "T");
+      }
+      return new Date(str + "Z");
+    }
+  }
+  return new Date(val);
+}
+
 function formatDate(val) {
   if (!val) return "-";
-  const d = new Date(val);
-  if (isNaN(d.getTime())) return "-";
-  return d.toLocaleDateString([], {
+  const d = parseUTCDate(val);
+  if (!d || isNaN(d.getTime())) return "-";
+
+  const dateStr = d.toLocaleDateString([], {
     year: "numeric",
     month: "short",
     day: "numeric",
   });
+
+  const timeStr = d.toLocaleTimeString([], {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  });
+
+  return `${dateStr}, ${timeStr}`;
 }
 
 function formatDuration(seconds = 0) {
@@ -21,19 +48,30 @@ function formatDuration(seconds = 0) {
   return `${h}h ${m}m`;
 }
 
-export function TasksPage() {
+function formatEta(hours = 0) {
+  if (!hours) return "-";
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  if (h === 0) return `${m} min`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+export function TasksPage({ taskDetailId, setTaskDetailId }) {
   const { user } = useAuth();
   const [tasks, setTasks] = useState([]);
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedTaskId, setSelectedTaskId] = useState(null);
-  
+
   // Tabs & Filters
   const [activeTab, setActiveTab] = useState("Ongoing"); // Ongoing (In Progress), TODO, Hold, Completed
   const [searchQuery, setSearchQuery] = useState("");
   const [assignedByFilter, setAssignedByFilter] = useState("All");
   const [assignedToFilter, setAssignedToFilter] = useState("All");
   const [dueDateFilter, setDueDateFilter] = useState("");
+  const [groupBy, setGroupBy] = useState("User");
+  const dueDateInputRef = useRef(null);
 
   // Stats State from DB
   const [stats, setStats] = useState({
@@ -47,12 +85,15 @@ export function TasksPage() {
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  
+
   // Create Task View
   const [showCreatePage, setShowCreatePage] = useState(false);
   const [createTitle, setCreateTitle] = useState("");
   const [createDescription, setCreateDescription] = useState("");
-  const [createDueDate, setCreateDueDate] = useState("");
+  const [createDueDateDate, setCreateDueDateDate] = useState("");
+  const [createDueDateTimeHour, setCreateDueDateTimeHour] = useState("12");
+  const [createDueDateTimeMinute, setCreateDueDateTimeMinute] = useState("00");
+  const [createDueDateTimeAmpm, setCreateDueDateTimeAmpm] = useState("PM");
   const [createEtaHours, setCreateEtaHours] = useState("");
   const [createAssignedToId, setCreateAssignedToId] = useState("");
   const [submittingTask, setSubmittingTask] = useState(false);
@@ -66,6 +107,13 @@ export function TasksPage() {
   useEffect(() => {
     loadTasksAndStats();
   }, [activeTab, searchQuery, assignedByFilter, assignedToFilter, dueDateFilter]);
+
+  // Open task detail from layout parameter (e.g., clicking notification)
+  useEffect(() => {
+    if (taskDetailId) {
+      setSelectedTaskId(taskDetailId);
+    }
+  }, [taskDetailId]);
 
   const loadUsers = async () => {
     try {
@@ -109,23 +157,38 @@ export function TasksPage() {
     if (!createTitle.trim() || submittingTask) return;
     setSubmittingTask(true);
     try {
+      let finalDueDate = null;
+      if (createDueDateDate) {
+        let hour24 = Number(createDueDateTimeHour);
+        if (createDueDateTimeAmpm === "PM" && hour24 < 12) {
+          hour24 += 12;
+        } else if (createDueDateTimeAmpm === "AM" && hour24 === 12) {
+          hour24 = 0;
+        }
+        const timeString = `${String(hour24).padStart(2, "0")}:${createDueDateTimeMinute}:00`;
+        finalDueDate = new Date(`${createDueDateDate}T${timeString}`).toISOString();
+      }
+
       const payload = {
         title: createTitle.trim(),
         description: createDescription.trim() || null,
-        due_date: createDueDate ? new Date(createDueDate).toISOString() : null,
+        due_date: finalDueDate,
         eta_hours: createEtaHours ? Number(createEtaHours) : 0.0,
         assigned_to_id: createAssignedToId ? Number(createAssignedToId) : null,
       };
       await api.createTask(payload);
-      
+
       // Reset form
       setCreateTitle("");
       setCreateDescription("");
-      setCreateDueDate("");
+      setCreateDueDateDate("");
+      setCreateDueDateTimeHour("12");
+      setCreateDueDateTimeMinute("00");
+      setCreateDueDateTimeAmpm("PM");
       setCreateEtaHours("");
       setCreateAssignedToId("");
       setShowCreatePage(false);
-      
+
       loadTasksAndStats();
       window.dispatchEvent(new CustomEvent("erp:notify", { detail: { message: "Task created successfully!", type: "success" } }));
     } catch (err) {
@@ -140,6 +203,7 @@ export function TasksPage() {
     setAssignedByFilter("All");
     setAssignedToFilter("All");
     setDueDateFilter("");
+    setGroupBy("User");
     setCurrentPage(1);
   };
 
@@ -160,6 +224,36 @@ export function TasksPage() {
     const start = (currentPage - 1) * pageSize;
     return tasks.slice(start, start + pageSize);
   }, [tasks, currentPage, pageSize]);
+
+  // Grouping tasks if selected
+  const groupedTasks = useMemo(() => {
+    if (groupBy === "None") return null;
+    const groups = {};
+    tasks.forEach((t) => {
+      let groupKey = "Unassigned";
+      if (groupBy === "User") {
+        groupKey = t.assigned_to ? t.assigned_to.name : "Unassigned";
+      } else if (groupBy === "Status") {
+        groupKey = t.status === "Ongoing" ? "In Progress" : t.status === "TODO" ? "To Do" : t.status === "Hold" ? "On Hold" : t.status === "Completed" ? "Completed" : (t.status || "To Do");
+      } else if (groupBy === "Date") {
+        if (t.created_at) {
+          const d = parseUTCDate(t.created_at);
+          groupKey = !d || isNaN(d.getTime()) ? "Unknown Date" : d.toLocaleDateString([], {
+            year: "numeric",
+            month: "short",
+            day: "numeric",
+          });
+        } else {
+          groupKey = "Unknown Date";
+        }
+      }
+      if (!groups[groupKey]) {
+        groups[groupKey] = [];
+      }
+      groups[groupKey].push(t);
+    });
+    return groups;
+  }, [tasks, groupBy]);
 
   const totalPages = Math.ceil(tasks.length / pageSize) || 1;
 
@@ -193,6 +287,7 @@ export function TasksPage() {
         taskId={selectedTaskId}
         onBack={() => {
           setSelectedTaskId(null);
+          if (setTaskDetailId) setTaskDetailId(null);
           loadTasksAndStats();
         }}
         currentUser={user}
@@ -281,12 +376,46 @@ export function TasksPage() {
 
               <div className="sidebar-field">
                 <label>Due Date</label>
-                <input
-                  type="datetime-local"
-                  value={createDueDate}
-                  onChange={(e) => setCreateDueDate(e.target.value)}
-                  className="field-date-input"
-                />
+                <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <input
+                    type="date"
+                    value={createDueDateDate}
+                    onChange={(e) => setCreateDueDateDate(e.target.value)}
+                    className="field-date-input"
+                  />
+                  <div style={{ display: "flex", gap: "4px" }}>
+                    <select
+                      value={createDueDateTimeHour}
+                      onChange={(e) => setCreateDueDateTimeHour(e.target.value)}
+                      className="field-select"
+                      style={{ flex: 1 }}
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+                        <option key={h} value={String(h).padStart(2, "0")}>{h}</option>
+                      ))}
+                    </select>
+                    <select
+                      value={createDueDateTimeMinute}
+                      onChange={(e) => setCreateDueDateTimeMinute(e.target.value)}
+                      className="field-select"
+                      style={{ flex: 1 }}
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i * 5).map((m) => {
+                        const mStr = String(m).padStart(2, "0");
+                        return <option key={m} value={mStr}>{mStr}</option>;
+                      })}
+                    </select>
+                    <select
+                      value={createDueDateTimeAmpm}
+                      onChange={(e) => setCreateDueDateTimeAmpm(e.target.value)}
+                      className="field-select"
+                      style={{ flex: 1 }}
+                    >
+                      <option value="AM">AM</option>
+                      <option value="PM">PM</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
               <div className="sidebar-field">
@@ -306,7 +435,8 @@ export function TasksPage() {
         </div>
 
         {/* Global Styles */}
-        <style dangerouslySetInnerHTML={{ __html: `
+        <style dangerouslySetInnerHTML={{
+          __html: `
           .task-detail-container { padding: 10px 15px; }
           .task-detail-header { display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid #e2e8f0; padding-bottom: 14px; margin-bottom: 20px; }
           .breadcrumb-box { display: flex; align-items: center; gap: 8px; }
@@ -335,7 +465,7 @@ export function TasksPage() {
 
   return (
     <div className="tasks-dashboard-wrapper">
-      
+
       {/* 1. Header tabs section */}
       <div className="dashboard-tab-header">
         <div className="task-status-tabs">
@@ -428,7 +558,19 @@ export function TasksPage() {
         </div>
 
         {/* Custom select card: Due Date */}
-        <div className="filter-box-custom due-date-filter-box">
+        <div
+          className="filter-box-custom due-date-filter-box"
+          style={{ cursor: "pointer" }}
+          onClick={() => {
+            if (dueDateInputRef.current) {
+              try {
+                dueDateInputRef.current.showPicker();
+              } catch (err) {
+                dueDateInputRef.current.click();
+              }
+            }
+          }}
+        >
           <span className="filter-box-label">Due Date</span>
           <div className="filter-box-value-row">
             <div className="filter-date-display-left">
@@ -438,6 +580,7 @@ export function TasksPage() {
             <ChevronDown size={14} className="filter-box-chevron" />
           </div>
           <input
+            ref={dueDateInputRef}
             type="date"
             value={dueDateFilter}
             onChange={(e) => {
@@ -445,7 +588,31 @@ export function TasksPage() {
               setCurrentPage(1);
             }}
             className="filter-box-select-overlay"
+            style={{ pointerEvents: "none" }}
           />
+        </div>
+
+        {/* Custom select card: Group By */}
+        <div className="filter-box-custom">
+          <span className="filter-box-label">Group By</span>
+          <div className="filter-box-value-row">
+            <span className="filter-box-val">
+              {groupBy === "None" ? "None" : groupBy === "User" ? "Assigned To" : groupBy === "Status" ? "Status" : "Created Date"}
+            </span>
+            <ChevronDown size={14} className="filter-box-chevron" />
+          </div>
+          <select
+            value={groupBy}
+            onChange={(e) => {
+              setGroupBy(e.target.value);
+            }}
+            className="filter-box-select-overlay"
+          >
+            <option value="None">None</option>
+            <option value="User">Assigned To</option>
+            <option value="Status">Status</option>
+            <option value="Date">Created Date</option>
+          </select>
         </div>
 
         <button type="button" onClick={handleResetFilters} className="btn-filter-funnel" title="Reset Filters">
@@ -510,98 +677,168 @@ export function TasksPage() {
       </div>
 
       {/* 4. Tasks Grid table */}
-      <div className="data-grid shadow-card">
-        <div className="table-wrap">
-          <table className="company-table tasks-dashboard-table">
-            <thead>
-              <tr>
-                <th style={{ width: "100px" }}>Task ID</th>
-                <th>Task Title</th>
-                <th>Assigned By</th>
-                <th>Assigned To</th>
-                <th>ETA</th>
-                <th>Due Date</th>
-                <th>Work Duration</th>
-                <th>Status</th>
-                <th style={{ width: "60px", textAlign: "center" }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
+      {groupBy !== "None" ? (
+        loading ? (
+          <div className="data-grid shadow-card" style={{ padding: "60px", textAlign: "center", color: "#64748b" }}>
+            <RefreshCw size={24} className="animate-spin" style={{ margin: "0 auto 12px" }} />
+            Loading tasks list...
+          </div>
+        ) : tasks.length === 0 ? (
+          <div className="data-grid shadow-card" style={{ padding: "60px", textAlign: "center", color: "#64748b" }}>
+            No records found
+          </div>
+        ) : (
+          Object.entries(groupedTasks).map(([groupName, groupList]) => (
+            <div key={groupName} className="task-group-section" style={{ marginBottom: "16px" }}>
+              <div className="task-group-header" style={{ fontSize: "13px", fontWeight: "700", color: "#176b5b", padding: "8px 12px", background: "#e6f4f1", borderRadius: "6px", marginBottom: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>{groupName}</span>
+                <span style={{ background: "#176b5b", color: "white", padding: "2px 8px", borderRadius: "10px", fontSize: "11px" }}>{groupList.length}</span>
+              </div>
+              <div className="data-grid shadow-card">
+                <div className="table-wrap">
+                  <table className="company-table tasks-dashboard-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: "10%" }}>Task ID</th>
+                        <th style={{ width: "40%" }}>Task Title</th>
+                        <th style={{ width: "10%" }}>Assigned By</th>
+                        <th style={{ width: "10%" }}>Assigned To</th>
+                        <th style={{ width: "5%" }}>ETA</th>
+                        <th style={{ width: "10%" }}>Due Date</th>
+                        <th style={{ width: "8%" }}>Work Duration</th>
+                        <th style={{ width: "8%" }}>Status</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {groupList.map((t) => (
+                        <tr
+                          key={t.id}
+                          onClick={() => setSelectedTaskId(t.id)}
+                          style={{ cursor: "pointer" }}
+                          className={`clickable-row ${t.timer_logs?.some(log => !log.end_time) ? "active-timer-highlight" : ""}`}
+                        >
+                          <td>
+                            <span className="task-id-pill">SAL-{t.id}</span>
+                          </td>
+                          <td>
+                            <div className="task-title-cell">
+                              <strong className="title-bold">{t.title}</strong>
+                            </div>
+                          </td>
+                          <td><span className="cell-text">{t.created_by?.name || "System"}</span></td>
+                          <td>
+                            <span className="cell-text">
+                              {t.assigned_to ? t.assigned_to.name : <em className="unassigned-text">Unassigned</em>}
+                            </span>
+                          </td>
+                          <td><span className="cell-text font-bold-dark">{formatEta(t.eta_hours)}</span></td>
+                          <td>
+                            <div className="due-date-cell">
+                              <Calendar size={14} className="cell-icon-slate" />
+                              <span>{formatDate(t.due_date)}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <div className="work-duration-cell">
+                              <Clock size={14} className="cell-icon-teal" />
+                              <span>{formatDuration(getTaskDuration(t))}</span>
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`status-badge-premium status-${(t.status || "TODO").toLowerCase()}`}>
+                              {t.status === "Ongoing" ? "In Progress" : t.status === "TODO" ? "To Do" : t.status === "Hold" ? "On Hold" : t.status === "Completed" ? "Completed" : "To Do"}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          ))
+        )
+      ) : (
+        <div className="data-grid shadow-card">
+          <div className="table-wrap">
+            <table className="company-table tasks-dashboard-table">
+              <thead>
                 <tr>
-                  <td colSpan={9} style={{ padding: "60px", textAlign: "center", color: "#64748b" }}>
-                    <RefreshCw size={24} className="animate-spin" style={{ margin: "0 auto 12px" }} />
-                    Loading tasks list...
-                  </td>
+                  <th style={{ width: "10%" }}>Task ID</th>
+                  <th style={{ width: "40%" }}>Task Title</th>
+                  <th style={{ width: "10%" }}>Assigned By</th>
+                  <th style={{ width: "10%" }}>Assigned To</th>
+                  <th style={{ width: "5%" }}>ETA</th>
+                  <th style={{ width: "10%" }}>Due Date</th>
+                  <th style={{ width: "8%" }}>Work Duration</th>
+                  <th style={{ width: "8%" }}>Status</th>
                 </tr>
-              ) : paginatedTasks.length === 0 ? (
-                <tr>
-                  <td colSpan={9} style={{ padding: "60px", textAlign: "center", color: "#64748b" }}>
-                    No records found
-                  </td>
-                </tr>
-              ) : (
-                paginatedTasks.map((t) => (
-                  <tr
-                    key={t.id}
-                    onClick={() => setSelectedTaskId(t.id)}
-                    style={{ cursor: "pointer" }}
-                    className="clickable-row"
-                  >
-                    <td>
-                      <span className="task-id-pill">SB-{t.id}</span>
-                    </td>
-                    <td>
-                      <div className="task-title-cell">
-                        <strong className="title-bold">{t.title}</strong>
-                        {t.description && (
-                          <span className="desc-subtitle">
-                            {t.description.length > 70
-                              ? `${t.description.substring(0, 70)}...`
-                              : t.description}
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                    <td><span className="cell-text">{t.created_by?.name || "System"}</span></td>
-                    <td>
-                      <span className="cell-text">
-                        {t.assigned_to ? t.assigned_to.name : <em className="unassigned-text">Unassigned</em>}
-                      </span>
-                    </td>
-                    <td><span className="cell-text font-bold-dark">{t.eta_hours}h</span></td>
-                    <td>
-                      <div className="due-date-cell">
-                        <Calendar size={14} className="cell-icon-slate" />
-                        <span>{formatDate(t.due_date)}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <div className="work-duration-cell">
-                        <Clock size={14} className="cell-icon-teal" />
-                        <span>{formatDuration(getTaskDuration(t))}</span>
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`status-badge-premium status-${(t.status || "TODO").toLowerCase()}`}>
-                        {t.status === "Ongoing" ? "In Progress" : t.status === "TODO" ? "To Do" : t.status === "Hold" ? "On Hold" : t.status === "Completed" ? "Completed" : "To Do"}
-                      </span>
-                    </td>
-                    <td onClick={(e) => e.stopPropagation()} style={{ textAlign: "center" }}>
-                      <button type="button" className="btn-table-action" onClick={() => setSelectedTaskId(t.id)}>
-                        <MoreVertical size={16} />
-                      </button>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan={8} style={{ padding: "60px", textAlign: "center", color: "#64748b" }}>
+                      <RefreshCw size={24} className="animate-spin" style={{ margin: "0 auto 12px" }} />
+                      Loading tasks list...
                     </td>
                   </tr>
-                ))
-              )}
-            </tbody>
-          </table>
+                ) : paginatedTasks.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ padding: "60px", textAlign: "center", color: "#64748b" }}>
+                      No records found
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedTasks.map((t) => (
+                    <tr
+                      key={t.id}
+                      onClick={() => setSelectedTaskId(t.id)}
+                      style={{ cursor: "pointer" }}
+                      className={`clickable-row ${t.timer_logs?.some(log => !log.end_time) ? "active-timer-highlight" : ""}`}
+                    >
+                      <td>
+                        <span className="task-id-pill">SAL-{t.id}</span>
+                      </td>
+                      <td>
+                        <div className="task-title-cell">
+                          <strong className="title-bold">{t.title}</strong>
+                        </div>
+                      </td>
+                      <td><span className="cell-text">{t.created_by?.name || "System"}</span></td>
+                      <td>
+                        <span className="cell-text">
+                          {t.assigned_to ? t.assigned_to.name : <em className="unassigned-text">Unassigned</em>}
+                        </span>
+                      </td>
+                      <td><span className="cell-text font-bold-dark">{formatEta(t.eta_hours)}</span></td>
+                      <td>
+                        <div className="due-date-cell">
+                          <Calendar size={14} className="cell-icon-slate" />
+                          <span>{formatDate(t.due_date)}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <div className="work-duration-cell">
+                          <Clock size={14} className="cell-icon-teal" />
+                          <span>{formatDuration(getTaskDuration(t))}</span>
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`status-badge-premium status-${(t.status || "TODO").toLowerCase()}`}>
+                          {t.status === "Ongoing" ? "In Progress" : t.status === "TODO" ? "To Do" : t.status === "Hold" ? "On Hold" : t.status === "Completed" ? "Completed" : "To Do"}
+                        </span>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 5. Pagination Footer */}
-      {!loading && tasks.length > 0 && (
+      {!loading && tasks.length > 0 && groupBy === "None" && (
         <div className="pagination-footer-bar">
           <span className="pagination-count-label">
             Showing {Math.min(tasks.length, (currentPage - 1) * pageSize + 1)} to{" "}
@@ -657,66 +894,66 @@ export function TasksPage() {
       )}
 
       {/* Style Overrides for TasksPage */}
-      <style dangerouslySetInnerHTML={{ __html: `
-        .tasks-dashboard-wrapper { display: flex; flex-direction: column; gap: 16px; padding: 10px; }
+      <style dangerouslySetInnerHTML={{
+        __html: `
+        .tasks-dashboard-wrapper { display: flex; flex-direction: column; gap: 10px; padding: 0; }
         
         /* 1. Header tabs */
-        .dashboard-tab-header { display: flex; justify-content: space-between; align-items: center; background: white; border: 1px solid #e2e8f0; border-radius: 8px; padding: 0 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
-        .task-status-tabs { display: flex; gap: 32px; }
-        .task-tab-btn { background: none; border: none; padding: 16px 4px; font-size: 14px; font-weight: 700; color: #64748b; cursor: pointer; transition: all 0.2s; border-bottom: 3px solid transparent; position: relative; bottom: -1px; }
+        .dashboard-tab-header { display: flex; justify-content: space-between; align-items: center; background: white; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0 16px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
+        .task-status-tabs { display: flex; gap: 24px; }
+        .task-tab-btn { background: none; border: none; padding: 10px 4px; font-size: 13px; font-weight: 700; color: #64748b; cursor: pointer; transition: all 0.2s; border-bottom: 3px solid transparent; position: relative; bottom: -1px; }
         .task-tab-btn:hover { color: #176b5b; }
         .task-tab-btn.active { color: #0f172a; border-bottom-color: #176b5b; }
-        .create-task-btn-top { background: #176b5b; color: white; display: inline-flex; align-items: center; gap: 6px; border: none; padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
+        .create-task-btn-top { background: #176b5b; color: white; display: inline-flex; align-items: center; gap: 6px; border: none; padding: 6px 12px; border-radius: 6px; font-size: 13px; font-weight: 700; cursor: pointer; transition: background 0.2s; }
         .create-task-btn-top:hover { background: #0f4d41; }
 
         /* 2. Filters Row */
-        .filters-container-bar { display: flex; align-items: center; gap: 12px; }
+        .filters-container-bar { display: flex; align-items: center; gap: 10px; }
         .search-field-box { flex: 1; position: relative; display: flex; align-items: center; }
-        .search-icon-inside { position: absolute; left: 12px; color: #94a3b8; }
-        .filter-search-input { width: 100%; height: 44px; padding: 8px 12px 8px 36px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box; outline: none; transition: border-color 0.2s; background: white; }
+        .search-icon-inside { position: absolute; left: 10px; color: #94a3b8; }
+        .filter-search-input { width: 100%; height: 38px; padding: 6px 10px 6px 30px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; box-sizing: border-box; outline: none; transition: border-color 0.2s; background: white; }
         .filter-search-input:focus { border-color: #176b5b; }
 
         /* Custom overlay select styles */
-        .filter-box-custom { position: relative; background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 6px 12px; height: 44px; min-width: 140px; display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; }
+        .filter-box-custom { position: relative; background: white; border: 1px solid #cbd5e1; border-radius: 6px; padding: 4px 10px; height: 38px; min-width: 130px; display: flex; flex-direction: column; justify-content: center; box-sizing: border-box; }
         .filter-box-custom:focus-within { border-color: #176b5b; }
-        .filter-box-label { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; line-height: 1; margin-bottom: 2px; }
+        .filter-box-label { font-size: 9px; font-weight: 700; color: #64748b; text-transform: uppercase; line-height: 1; margin-bottom: 1px; }
         .filter-box-value-row { display: flex; justify-content: space-between; align-items: center; width: 100%; }
-        .filter-box-val { font-size: 13px; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 110px; }
+        .filter-box-val { font-size: 12px; font-weight: 600; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; }
         .filter-box-chevron { color: #64748b; flex-shrink: 0; }
         .filter-box-select-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; -webkit-appearance: none; appearance: none; }
         
-        .filter-date-display-left { display: flex; align-items: center; gap: 6px; }
+        .filter-date-display-left { display: flex; align-items: center; gap: 4px; }
         .filter-date-icon { color: #64748b; flex-shrink: 0; }
 
-        .btn-filter-funnel, .btn-filter-refresh { width: 44px; height: 44px; border: 1px solid #cbd5e1; background: white; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #475569; transition: background 0.2s; }
+        .btn-filter-funnel, .btn-filter-refresh { width: 38px; height: 38px; border: 1px solid #cbd5e1; background: white; border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: center; color: #475569; transition: background 0.2s; }
         .btn-filter-funnel:hover, .btn-filter-refresh:hover { background: #f8fafc; border-color: #176b5b; }
 
         /* 3. Metric cards row - unified card container */
-        .metrics-container-card { background: white; border: 1px solid #e2e8f0; border-radius: 8px; display: grid; grid-template-columns: repeat(5, 1fr); box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
-        .metric-col-item { display: flex; align-items: center; gap: 14px; padding: 14px 20px; }
+        .metrics-container-card { background: white; border: 1px solid #e2e8f0; border-radius: 6px; display: grid; grid-template-columns: repeat(5, 1fr); box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
+        .metric-col-item { display: flex; align-items: center; gap: 10px; padding: 8px 14px; }
         .metric-col-item:not(:last-child) { border-right: 1px solid #f1f5f9; }
-        .metric-icon-circle { width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+        .metric-icon-circle { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
         .metric-icon-circle.total { background: #e6f4f1; color: #176b5b; }
         .metric-icon-circle.inprogress { background: #e6f4f1; color: #176b5b; }
         .metric-icon-circle.todo { background: #eff6ff; color: #2563eb; }
         .metric-icon-circle.onhold { background: #fff7ed; color: #ea580c; }
         .metric-icon-circle.completed { background: #f0fdf4; color: #16a34a; }
-        .metric-info-box { display: flex; flex-direction: column; gap: 2px; }
-        .metric-label-text { font-size: 11px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.02em; }
-        .metric-val-num { font-size: 20px; font-weight: 800; color: #0f172a; line-height: 1.1; }
+        .metric-info-box { display: flex; flex-direction: column; }
+        .metric-label-text { font-size: 10px; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.02em; }
+        .metric-val-num { font-size: 18px; font-weight: 800; color: #0f172a; line-height: 1.1; }
         .metric-val-num.inprogress { color: #176b5b; }
         .metric-val-num.onhold { color: #ea580c; }
 
         /* 4. Tasks Grid table */
-        .shadow-card { box-shadow: 0 4px 12px rgba(0,0,0,0.02); border: 1px solid #e2e8f0; border-radius: 8px; background: white; overflow: hidden; }
+        .shadow-card { box-shadow: 0 4px 12px rgba(0,0,0,0.02); border: 1px solid #e2e8f0; border-radius: 6px; background: white; overflow: hidden; }
         .tasks-dashboard-table.company-table { width: 100%; border-collapse: collapse; text-align: left; }
-        .tasks-dashboard-table.company-table th { border-bottom: 1px solid #e2e8f0; padding: 12px 16px; font-size: 12px; font-weight: 700; color: #475569; background: #fafafa; }
-        .tasks-dashboard-table.company-table td { padding: 14px 16px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
+        .tasks-dashboard-table.company-table th { border-bottom: 1px solid #e2e8f0; padding: 8px 12px; font-size: 12px; font-weight: 700; color: #475569; background: #fafafa; }
+        .tasks-dashboard-table.company-table td { padding: 8px 12px; border-bottom: 1px solid #f1f5f9; vertical-align: middle; }
         
-        .task-id-pill { background: #e6f4f1; color: #176b5b; padding: 4px 8px; border-radius: 4px; font-weight: 700; font-size: 12px; border: 1px solid #cce5e0; }
+        .task-id-pill { background: #e6f4f1; color: #176b5b; padding: 2px 6px; border-radius: 4px; font-weight: 700; font-size: 11px; border: 1px solid #cce5e0; }
         .task-title-cell { display: flex; flex-direction: column; gap: 2px; }
-        .title-bold { font-size: 13px; color: #0f172a; font-weight: 700; }
-        .desc-subtitle { font-size: 11px; color: #64748b; font-weight: 500; }
+        .title-bold { font-size: 13px; color: #0f172a; font-weight: 600; }
         .unassigned-text { color: #94a3b8; font-style: italic; }
         .font-bold-dark { font-weight: 700; color: #334155; }
         
@@ -724,17 +961,17 @@ export function TasksPage() {
         .cell-icon-slate { color: #94a3b8; }
         .cell-icon-teal { color: #176b5b; }
         
-        .status-badge-premium { display: inline-block; padding: 4px 8px; border-radius: 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; text-align: center; }
+        .status-badge-premium { display: inline-block; padding: 2px 6px; border-radius: 4px; font-size: 10px; font-weight: 700; text-transform: uppercase; text-align: center; }
         .status-badge-premium.status-todo { background: #f1f5f9; color: #475569; }
         .status-badge-premium.status-ongoing { background: #e6f4f1; color: #176b5b; }
         .status-badge-premium.status-hold { background: #fff7ed; color: #c2410c; }
         .status-badge-premium.status-completed { background: #dcfce7; color: #15803d; }
         
-        .btn-table-action { background: none; border: none; cursor: pointer; color: #94a3b8; padding: 4px; display: inline-flex; border-radius: 4px; }
-        .btn-table-action:hover { background: #f1f5f9; color: #475569; }
+        .clickable-row.active-timer-highlight td { background-color: #e6f4ea !important; border-bottom-color: #bbf7d0 !important; }
+        .clickable-row.active-timer-highlight:hover td { background-color: #dcfce7 !important; }
         
         /* 5. Pagination Footer */
-        .pagination-footer-bar { display: flex; justify-content: space-between; align-items: center; padding: 12px 20px; background: white; border: 1px solid #e2e8f0; border-radius: 8px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
+        .pagination-footer-bar { display: flex; justify-content: space-between; align-items: center; padding: 8px 16px; background: white; border: 1px solid #e2e8f0; border-radius: 6px; box-shadow: 0 1px 3px rgba(0,0,0,0.02); }
         .pagination-count-label { font-size: 12px; font-weight: 600; color: #475569; }
         
         .pagination-controls-box { display: flex; align-items: center; gap: 8px; }

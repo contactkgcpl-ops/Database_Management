@@ -63,13 +63,16 @@ function formatDateTime(val) {
 
 function formatDateOnly(val) {
   if (!val) return "-";
-  const date = parseUTCDate(val);
-  if (!date) return "-";
-  const day = date.getDate();
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-  const month = months[date.getMonth()];
-  const year = date.getFullYear();
-  return `${day} ${month} ${year}`;
+  return formatDateTime(val);
+}
+
+function formatEta(hours = 0) {
+  if (!hours) return "-";
+  const h = Math.floor(hours);
+  const m = Math.round((hours - h) * 60);
+  if (h === 0) return `${m} min`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
 }
 
 function getPriorityColor(p) {
@@ -110,6 +113,10 @@ export function TaskDetailPage({ taskId, onBack, currentUser }) {
   const [priority, setPriority] = useState("Normal");
   const [etaHours, setEtaHours] = useState(0);
   const [dueDate, setDueDate] = useState("");
+  const [dueDateDate, setDueDateDate] = useState("");
+  const [dueDateTimeHour, setDueDateTimeHour] = useState("12");
+  const [dueDateTimeMinute, setDueDateTimeMinute] = useState("00");
+  const [dueDateTimeAmpm, setDueDateTimeAmpm] = useState("PM");
   const [status, setStatus] = useState("TODO");
 
   // UI Interactive States
@@ -144,8 +151,42 @@ export function TaskDetailPage({ taskId, onBack, currentUser }) {
       setAssignedToId(data.assigned_to_id || "");
       setPriority(data.priority || "Normal");
       setEtaHours(data.eta_hours || 0);
-      setDueDate(data.due_date ? data.due_date.split(".")[0] : "");
       setStatus(data.status || "TODO");
+
+      if (data.due_date) {
+        const d = parseUTCDate(data.due_date);
+        if (d && !isNaN(d.getTime())) {
+          const year = d.getFullYear();
+          const month = String(d.getMonth() + 1).padStart(2, "0");
+          const date = String(d.getDate()).padStart(2, "0");
+          setDueDateDate(`${year}-${month}-${date}`);
+
+          let hours = d.getHours();
+          const ampm = hours >= 12 ? "PM" : "AM";
+          hours = hours % 12;
+          hours = hours ? hours : 12;
+          setDueDateTimeHour(String(hours).padStart(2, "0"));
+
+          const minutes = d.getMinutes();
+          const roundedMinutes = Math.round(minutes / 5) * 5;
+          const displayMinutes = roundedMinutes >= 60 ? 55 : roundedMinutes;
+          setDueDateTimeMinute(String(displayMinutes).padStart(2, "0"));
+          setDueDateTimeAmpm(ampm);
+          setDueDate(d.toISOString());
+        } else {
+          setDueDateDate("");
+          setDueDateTimeHour("12");
+          setDueDateTimeMinute("00");
+          setDueDateTimeAmpm("PM");
+          setDueDate("");
+        }
+      } else {
+        setDueDateDate("");
+        setDueDateTimeHour("12");
+        setDueDateTimeMinute("00");
+        setDueDateTimeAmpm("PM");
+        setDueDate("");
+      }
 
       // Check if current user has an active running timer on this task
       const active = (data.timer_logs || []).find(
@@ -174,6 +215,29 @@ export function TaskDetailPage({ taskId, onBack, currentUser }) {
     }, 1000);
     return () => clearInterval(interval);
   }, [activeLog]);
+
+  // Sync split due date components back to single dueDate state
+  useEffect(() => {
+    if (dueDateDate) {
+      let hour24 = Number(dueDateTimeHour);
+      if (dueDateTimeAmpm === "PM" && hour24 < 12) {
+        hour24 += 12;
+      } else if (dueDateTimeAmpm === "AM" && hour24 === 12) {
+        hour24 = 0;
+      }
+      const timeString = `${String(hour24).padStart(2, "0")}:${dueDateTimeMinute}:00`;
+      try {
+        const localDate = new Date(`${dueDateDate}T${timeString}`);
+        if (!isNaN(localDate.getTime())) {
+          setDueDate(localDate.toISOString());
+        }
+      } catch (err) {
+        console.error(err);
+      }
+    } else {
+      setDueDate("");
+    }
+  }, [dueDateDate, dueDateTimeHour, dueDateTimeMinute, dueDateTimeAmpm]);
 
   const handleStartTimer = async () => {
     try {
@@ -385,7 +449,7 @@ export function TaskDetailPage({ taskId, onBack, currentUser }) {
       {/* Header Info and Actions Row */}
       <div className="task-detail-header-bar">
         <div className="header-info-group">
-          <span className="task-id-pill">SB-{task.id}</span>
+          <span className="task-id-pill">SAL-{task.id}</span>
           <div className="task-title-editor-wrapper">
             {isEditingTitle ? (
               <input
@@ -414,12 +478,11 @@ export function TaskDetailPage({ taskId, onBack, currentUser }) {
             <button
               type="button"
               className="status-dropdown-btn"
-              onClick={() => isEditable && setShowStatusDropdown(!showStatusDropdown)}
-              disabled={!isEditable}
+              onClick={() => setShowStatusDropdown(!showStatusDropdown)}
             >
               <span className="status-indicator-dot" style={{ backgroundColor: currentStatusOpt.color }}></span>
               {currentStatusOpt.label}
-              {isEditable && <ChevronDown size={14} />}
+              <ChevronDown size={14} />
             </button>
             {showStatusDropdown && (
               <div className="status-dropdown-menu">
@@ -428,9 +491,16 @@ export function TaskDetailPage({ taskId, onBack, currentUser }) {
                     key={opt.value}
                     type="button"
                     className={`status-dropdown-item ${status === opt.value ? "active" : ""}`}
-                    onClick={() => {
+                    onClick={async () => {
                       setStatus(opt.value);
                       setShowStatusDropdown(false);
+                      try {
+                        await api.updateTask(taskId, { status: opt.value });
+                        window.dispatchEvent(new CustomEvent("erp:notify", { detail: { message: `Status updated to ${opt.label}!`, type: "success" } }));
+                        loadTask();
+                      } catch (err) {
+                        console.error(err);
+                      }
                     }}
                   >
                     <span className="status-indicator-dot" style={{ backgroundColor: opt.color }}></span>
@@ -501,7 +571,7 @@ export function TaskDetailPage({ taskId, onBack, currentUser }) {
           <span className="metric-label">ETA</span>
           <div className="metric-val-wrapper">
             <Clock size={16} className="metric-val-icon" />
-            <span className="metric-val-text">{etaHours ? `${etaHours} Hours` : "0 Hours"}</span>
+            <span className="metric-val-text">{formatEta(etaHours)}</span>
           </div>
         </div>
       </div>
@@ -528,75 +598,7 @@ export function TaskDetailPage({ taskId, onBack, currentUser }) {
             )}
           </div>
 
-          {/* Time Summary Box */}
-          <div className="details-card-block">
-            <h3 className="card-block-title">Time Summary</h3>
-            <div className="time-summary-grid">
-              <div className="time-summary-widget">
-                <span className="summary-widget-label">Estimated Time</span>
-                <div className="summary-widget-val-row">
-                  <div className="summary-icon-circle bg-muted">
-                    <Clock size={18} />
-                  </div>
-                  <span className="summary-widget-val-text">{etaHours || 0}h</span>
-                </div>
-              </div>
 
-              <div className="time-summary-widget">
-                <span className="summary-widget-label">Time Worked</span>
-                <div className="summary-widget-val-row">
-                  <div className="summary-icon-circle bg-success">
-                    <Play size={16} fill="currentColor" style={{ marginLeft: "2px" }} />
-                  </div>
-                  <span className="summary-widget-val-text text-success font-bold">
-                    {formatDuration(totalWorkedSeconds)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="time-summary-widget">
-                <span className="summary-widget-label">Remaining Time</span>
-                <div className="summary-widget-val-row">
-                  <div className="summary-icon-circle bg-warning">
-                    <Hourglass size={16} />
-                  </div>
-                  <span className="summary-widget-val-text">
-                    {formatDuration(remainingSeconds)}
-                  </span>
-                </div>
-              </div>
-
-              <div className="time-summary-widget">
-                <span className="summary-widget-label">Progress</span>
-                <div className="summary-widget-val-row progress-gauge-row">
-                  <div className="progress-gauge-indicator">
-                    <svg width="40" height="40" viewBox="0 0 36 36" className="circular-progress-svg">
-                      <path
-                        className="circle-bg-track"
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke="#f1f5f9"
-                        strokeWidth="4"
-                      />
-                      <path
-                        className="circle-progress-filled"
-                        strokeDasharray={`${statusProgressPercent}, 100`}
-                        d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"
-                        fill="none"
-                        stroke="#176b5b"
-                        strokeWidth="4"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </div>
-                  <div className="progress-percentages-list">
-                    <span className="pct-title">{statusProgressPercent}%</span>
-                    <span className="pct-subtitle">{timeProgressPercent}%</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
 
           {/* Work History Timeline Block */}
           <div className="details-card-block">
@@ -725,6 +727,25 @@ export function TaskDetailPage({ taskId, onBack, currentUser }) {
 
         {/* Right Column (Sidebar) */}
         <div className="task-detail-grid-right">
+          {/* Time Summary Widget */}
+          <div className="details-card-block">
+            <h3 className="card-block-title">Time Summary</h3>
+            <div className="details-vertical-table">
+              <div className="details-table-row">
+                <span className="table-row-label">Estimated Time</span>
+                <span className="table-row-value font-bold">{formatEta(etaHours)}</span>
+              </div>
+              <div className="details-table-row">
+                <span className="table-row-label">Time Worked</span>
+                <span className="table-row-value font-bold text-success">{formatDuration(totalWorkedSeconds)}</span>
+              </div>
+              <div className="details-table-row">
+                <span className="table-row-label">Remaining Time</span>
+                <span className="table-row-value font-bold">{formatDuration(remainingSeconds)}</span>
+              </div>
+            </div>
+          </div>
+
           {/* Task Details Widget */}
           <div className="details-card-block">
             <h3 className="card-block-title">Task Details</h3>
@@ -741,18 +762,52 @@ export function TaskDetailPage({ taskId, onBack, currentUser }) {
                 <span className="table-row-label">Start Date</span>
                 <span className="table-row-value">{formatDateTime(task.created_at)}</span>
               </div>
-              <div className="details-table-row">
-                <span className="table-row-label">Due Date</span>
+              <div className="details-table-row" style={{ alignItems: "flex-start" }}>
+                <span className="table-row-label" style={{ paddingTop: "6px" }}>Due Date</span>
                 <span className="table-row-value flex-align-center">
                   {isEditable ? (
-                    <div className="relative-input-wrapper">
-                      <input
-                        type="datetime-local"
-                        value={dueDate}
-                        onChange={(e) => setDueDate(e.target.value)}
-                        className="details-table-input date-input"
-                      />
-                      <Calendar size={14} className="input-calendar-picker-icon" />
+                    <div style={{ display: "flex", flexDirection: "column", gap: "4px", width: "180px" }}>
+                      <div className="relative-input-wrapper" style={{ width: "100%" }}>
+                        <input
+                          type="date"
+                          value={dueDateDate}
+                          onChange={(e) => setDueDateDate(e.target.value)}
+                          className="details-table-input"
+                          style={{ width: "100%", paddingRight: "8px" }}
+                        />
+                      </div>
+                      <div style={{ display: "flex", gap: "4px", width: "100%" }}>
+                        <select
+                          value={dueDateTimeHour}
+                          onChange={(e) => setDueDateTimeHour(e.target.value)}
+                          className="details-table-select"
+                          style={{ flex: 1, padding: "4px", minWidth: "0", width: "auto" }}
+                        >
+                          {Array.from({ length: 12 }, (_, i) => i + 1).map((h) => (
+                            <option key={h} value={String(h).padStart(2, "0")}>{h}</option>
+                          ))}
+                        </select>
+                        <select
+                          value={dueDateTimeMinute}
+                          onChange={(e) => setDueDateTimeMinute(e.target.value)}
+                          className="details-table-select"
+                          style={{ flex: 1, padding: "4px", minWidth: "0", width: "auto" }}
+                        >
+                          {Array.from({ length: 12 }, (_, i) => i * 5).map((m) => {
+                            const mStr = String(m).padStart(2, "0");
+                            return <option key={m} value={mStr}>{mStr}</option>;
+                          })}
+                        </select>
+                        <select
+                          value={dueDateTimeAmpm}
+                          onChange={(e) => setDueDateTimeAmpm(e.target.value)}
+                          className="details-table-select"
+                          style={{ flex: 1, padding: "4px", minWidth: "0", width: "auto" }}
+                        >
+                          <option value="AM">AM</option>
+                          <option value="PM">PM</option>
+                        </select>
+                      </div>
                     </div>
                   ) : (
                     formatDateTime(dueDate)
@@ -794,7 +849,7 @@ export function TaskDetailPage({ taskId, onBack, currentUser }) {
                       className="details-table-input number-input"
                     />
                   ) : (
-                    etaHours
+                    formatEta(etaHours)
                   )}
                 </span>
               </div>

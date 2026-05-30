@@ -367,7 +367,7 @@ function DetailModal({ open, onClose, req, onComplete, onEdit, currentUserId, no
 }
 
 // ─── Main Page ────────────────────────────────────────────────────────────────
-export function RequirementsPage() {
+export function RequirementsPage({ requirementDetailId, setRequirementDetailId }) {
   const notify = useNotify();
   const { user } = useAuth();
 
@@ -383,6 +383,16 @@ export function RequirementsPage() {
   const [viewReq, setViewReq] = useState(null);
 
   const requirements = useLoad(() => api.requirements(), []);
+
+  // Open requirement detail from layout parameter (e.g., clicking notification)
+  React.useEffect(() => {
+    if (requirementDetailId && requirements.data) {
+      const found = requirements.data.find(r => Number(r.id) === Number(requirementDetailId));
+      if (found) {
+        setViewReq(found);
+      }
+    }
+  }, [requirementDetailId, requirements.data]);
   const users = useLoad(() => api.users(), []);
   const activeUsers = (users.data || []).filter(u => u.is_active);
 
@@ -738,7 +748,10 @@ export function RequirementsPage() {
       />
       <DetailModal
         open={!!viewReq}
-        onClose={() => setViewReq(null)}
+        onClose={() => {
+          setViewReq(null);
+          if (setRequirementDetailId) setRequirementDetailId(null);
+        }}
         req={viewReq}
         onComplete={async (id) => { await handleComplete(id); requirements.reload(); }}
         onEdit={req => { setEditReq(req); setShowAddModal(true); }}

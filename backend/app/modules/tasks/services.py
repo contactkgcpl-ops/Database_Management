@@ -1,7 +1,7 @@
 from datetime import datetime
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
-from app.models import Task, TaskTimerLog, TaskHistory, TaskComment, TaskNotification, User
+from app.models import Task, TaskTimerLog, TaskHistory, TaskComment, TaskNotification, User, UserTimeLog
 from app.schemas import TaskCreate, TaskUpdate
 
 def get_ancestor_ids(db: Session, user_id: int) -> set[int]:
@@ -353,12 +353,19 @@ def add_task_comment(db: Session, task_id: int, current_user: User, comment_text
     return comment
 
 
-def get_staff_report(db: Session, work_date, user_ids: list[int] | None = None, current_user: User | None = None) -> list[dict]:
-    from datetime import date, time, datetime
+def get_staff_report(db: Session, start_date, end_date, user_ids: list[int] | None = None, current_user: User | None = None) -> list[dict]:
+    from datetime import date, time, datetime, timedelta, timezone
     
-    # Start and End of the day D in UTC timezone
-    start_dt = datetime.combine(work_date, time.min)
-    end_dt = datetime.combine(work_date, time.max)
+    def format_utc_iso(dt):
+        if not dt:
+            return None
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt.isoformat()
+
+    # Start and End of the entire date range in local representation / UTC bounds
+    range_start_dt = datetime.combine(start_date, time.min)
+    range_end_dt = datetime.combine(end_date, time.max)
     
     # Query active users
     query_users = db.query(User).filter(User.is_active == True)
@@ -376,184 +383,305 @@ def get_staff_report(db: Session, work_date, user_ids: list[int] | None = None, 
     
     report_data = []
     
+    num_days = (end_date - start_date).days + 1
+    dates_in_range = [start_date + timedelta(days=x) for x in range(num_days)]
+    
     for u in users:
-        # 1. Query timer logs for this user overlapping with the target date
+        # 1. Query timer logs for this user overlapping with the range
         logs = db.query(TaskTimerLog).filter(
             TaskTimerLog.user_id == u.id,
-            TaskTimerLog.start_time < end_dt,
-            (TaskTimerLog.end_time == None) | (TaskTimerLog.end_time > start_dt)
+            TaskTimerLog.start_time < range_end_dt,
+            (TaskTimerLog.end_time == None) | (TaskTimerLog.end_time > range_start_dt)
         ).all()
         
-        # 2. Query status counts for the selected day
-        # Pending: assigned to user, created before end_dt, not completed on/before end_dt
-        pending_tasks = db.query(Task).filter(
+        # 2. Query all tasks assigned to this user that were created before or during the range
+        assigned_tasks = db.query(Task).filter(
             Task.assigned_to_id == u.id,
-            Task.created_at <= end_dt,
-            (Task.status != "Completed") | (Task.updated_at > end_dt)
-        ).all()
-        pending_count = len(pending_tasks)
-        
-        # Completed on this day: assigned to user, status is Completed, updated_at falls on this day
-        completed_tasks = db.query(Task).filter(
-            Task.assigned_to_id == u.id,
-            Task.status == "Completed",
-            Task.updated_at >= start_dt,
-            Task.updated_at <= end_dt
-        ).all()
-        completed_count = len(completed_tasks)
-        
-        # Query active assigned tasks (either pending or completed today)
-        active_assigned_tasks = db.query(Task).filter(
-            Task.assigned_to_id == u.id,
-            Task.created_at <= end_dt
-        ).filter(
-            (Task.status != "Completed") | (Task.updated_at >= start_dt)
+            Task.created_at <= range_end_dt
         ).all()
         
-        # Group timer logs and active tasks
-        task_work = {}
-        total_time_worked_today = 0
+        # 3. Query all user login/logout logs in the range
+        attendance_logs = db.query(UserTimeLog).filter(
+            UserTimeLog.user_id == u.id,
+            UserTimeLog.work_date >= start_date,
+            UserTimeLog.work_date <= end_date
+        ).all()
+        attendance_map = {log.work_date: log for log in attendance_logs}
         
-        # Helper to determine task status on Day D
-        def get_task_status_at(task, end_dt):
-            if task.status == "Completed" and task.updated_at > end_dt:
-                has_logs_before = any(l.start_time < end_dt for l in task.timer_logs)
-                return "In Progress" if has_logs_before else "TODO"
-            return task.status
+        days_data = []
+        unique_tasks_worked_range = set()
+        total_completed_range = 0
+        total_worked_seconds_range = 0
+        total_login_hours_range = 0.0
+        total_break_hours_range = 0.0
+        daily_efficiencies = []
+        time_utils_list = []
+        comp_rates_list = []
+        task_effs_list = []
+        
+        for d in dates_in_range:
+            start_dt = datetime.combine(d, time.min)
+            end_dt = datetime.combine(d, time.max)
             
-        # Helper to calculate total worked seconds logged on task up to end_dt
-        def get_total_worked_seconds_up_to(task, end_dt):
-            total = 0
-            for l in task.timer_logs:
-                if l.start_time < end_dt:
-                    end = min(l.end_time or datetime.utcnow(), end_dt)
-                    total += max(0, int((end - l.start_time).total_seconds()))
-            return total
+            day_logs = [
+                l for l in logs 
+                if l.start_time < end_dt and (l.end_time is None or l.end_time > start_dt)
+            ]
             
-        # First process tasks worked on today
-        for log in logs:
-            task_id = log.task_id
-            if not task_id:
-                continue
-                
-            task_title = log.task.title if log.task else f"Task #{task_id}"
-            task_eta = log.task.eta_hours if log.task else 0.0
+            # Get attendance details
+            attendance_log = attendance_map.get(d)
+            login_time = None
+            logout_time = None
+            total_login_hours = 0.0
+            total_break_hours = 0.0
             
-            # Calculate overlapping duration in seconds today
-            log_start = max(log.start_time, start_dt)
-            log_end = min(log.end_time or datetime.utcnow(), end_dt)
-            overlap_seconds = max(0, int((log_end - log_start).total_seconds()))
-            
-            if overlap_seconds <= 0:
-                continue
-                
-            if task_id not in task_work:
-                total_worked_seconds = 0
-                if log.task:
-                    total_worked_seconds = get_total_worked_seconds_up_to(log.task, end_dt)
+            if attendance_log:
+                login_time = format_utc_iso(attendance_log.login_at)
+                logout_time = format_utc_iso(attendance_log.logout_at)
+                total_break_hours = round(attendance_log.total_break_seconds / 3600.0, 2)
+                if attendance_log.logout_at:
+                    seconds = (attendance_log.logout_at - attendance_log.login_at).total_seconds()
+                    net_seconds = max(0, seconds - attendance_log.total_break_seconds)
+                    total_login_hours = round(net_seconds / 3600.0, 2)
                 else:
-                    total_worked_seconds = overlap_seconds
+                    if d == date.today():
+                        now_utc = datetime.utcnow()
+                        seconds = (now_utc - attendance_log.login_at).total_seconds()
+                        net_seconds = max(0, seconds - attendance_log.total_break_seconds)
+                        total_login_hours = round(net_seconds / 3600.0, 2)
+                    else:
+                        total_login_hours = round(attendance_log.total_work_seconds / 3600.0, 2)
+            
+            total_login_hours_range += total_login_hours
+            total_break_hours_range += total_break_hours
+            
+            day_pending = [
+                t for t in assigned_tasks
+                if t.created_at <= end_dt and (t.status != "Completed" or (t.updated_at and t.updated_at > end_dt))
+            ]
+            pending_count = len(day_pending)
+            
+            day_completed = [
+                t for t in assigned_tasks
+                if t.status == "Completed" and t.updated_at and start_dt <= t.updated_at <= end_dt
+            ]
+            completed_count = len(day_completed)
+            total_completed_range += completed_count
+            
+            day_active_assigned = [
+                t for t in assigned_tasks
+                if t.created_at <= end_dt and (t.status != "Completed" or (t.updated_at and t.updated_at >= start_dt))
+            ]
+            
+            task_work = {}
+            total_time_worked_today = 0
+            
+            def get_task_status_at(task, end_dt):
+                if task.status == "Completed" and task.updated_at and task.updated_at > end_dt:
+                    has_logs_before = any(l.start_time < end_dt for l in task.timer_logs)
+                    return "In Progress" if has_logs_before else "TODO"
+                return task.status
+                
+            def get_total_worked_seconds_up_to(task, end_dt):
+                total = 0
+                for l in task.timer_logs:
+                    if l.start_time < end_dt:
+                        end = min(l.end_time or datetime.utcnow(), end_dt)
+                        total += max(0, int((end - l.start_time).total_seconds()))
+                return total
+                
+            for log in day_logs:
+                task_id = log.task_id
+                if not task_id:
+                    continue
+                
+                unique_tasks_worked_range.add(task_id)
+                task_title = log.task.title if log.task else f"Task #{task_id}"
+                task_eta = log.task.eta_hours if log.task else 0.0
+                
+                log_start = max(log.start_time, start_dt)
+                log_end = min(log.end_time or datetime.utcnow(), end_dt)
+                overlap_seconds = max(0, int((log_end - log_start).total_seconds()))
+                
+                if overlap_seconds <= 0:
+                    continue
                     
-                task_work[task_id] = {
-                    "task_id": task_id,
-                    "task_title": task_title,
-                    "eta_hours": task_eta,
-                    "time_worked_today_seconds": 0,
-                    "total_worked_seconds": total_worked_seconds,
-                    "status": get_task_status_at(log.task, end_dt) if log.task else "In Progress",
-                    "worked_today": True,
-                    "is_running": False
-                }
-                
-            task_work[task_id]["time_worked_today_seconds"] += overlap_seconds
-            total_time_worked_today += overlap_seconds
-            if log.end_time is None:
-                task_work[task_id]["is_running"] = True
+                if task_id not in task_work:
+                    total_worked_seconds = 0
+                    if log.task:
+                        total_worked_seconds = get_total_worked_seconds_up_to(log.task, end_dt)
+                    else:
+                        total_worked_seconds = overlap_seconds
+                        
+                    task_work[task_id] = {
+                        "task_id": task_id,
+                        "task_title": task_title,
+                        "eta_hours": task_eta,
+                        "time_worked_today_seconds": 0,
+                        "total_worked_seconds": total_worked_seconds,
+                        "status": get_task_status_at(log.task, end_dt) if log.task else "In Progress",
+                        "worked_today": True,
+                        "is_running": False
+                    }
+                    
+                task_work[task_id]["time_worked_today_seconds"] += overlap_seconds
+                total_time_worked_today += overlap_seconds
+                if log.end_time is None:
+                    task_work[task_id]["is_running"] = True
+                    
+            for task in day_active_assigned:
+                if task.id not in task_work:
+                    total_worked_seconds = get_total_worked_seconds_up_to(task, end_dt)
+                    task_work[task.id] = {
+                        "task_id": task.id,
+                        "task_title": task.title,
+                        "eta_hours": task.eta_hours or 0.0,
+                        "time_worked_today_seconds": 0,
+                        "total_worked_seconds": total_worked_seconds,
+                        "status": get_task_status_at(task, end_dt),
+                        "worked_today": False,
+                        "is_running": False
+                    }
+                    
+            tasks_list = []
+            task_efficiencies_worked_today = []
             
-        # Then process active assigned tasks that had 0 hours worked today
-        for task in active_assigned_tasks:
-            if task.id not in task_work:
-                total_worked_seconds = get_total_worked_seconds_up_to(task, end_dt)
-                task_work[task.id] = {
-                    "task_id": task.id,
-                    "task_title": task.title,
-                    "eta_hours": task.eta_hours or 0.0,
-                    "time_worked_today_seconds": 0,
-                    "total_worked_seconds": total_worked_seconds,
-                    "status": get_task_status_at(task, end_dt),
-                    "worked_today": False,
-                    "is_running": False
-                }
+            for t_id, t_info in task_work.items():
+                worked_today_hours = t_info["time_worked_today_seconds"] / 3600.0
+                total_worked_hours = t_info["total_worked_seconds"] / 3600.0
+                eta_hours = t_info["eta_hours"]
+                status = t_info["status"]
                 
-        # Convert task_work dict to list and calculate efficiencies
-        tasks_list = []
-        task_efficiencies_worked_today = []
-        
-        for t_id, t_info in task_work.items():
-            worked_today_hours = t_info["time_worked_today_seconds"] / 3600.0
-            total_worked_hours = t_info["total_worked_seconds"] / 3600.0
-            eta_hours = t_info["eta_hours"]
-            
-            # Case A-D
-            if total_worked_hours > 0 and eta_hours > 0:
-                efficiency_pct = (eta_hours / total_worked_hours) * 100
-            elif total_worked_hours == 0 and eta_hours > 0:
-                efficiency_pct = 0.0
-            elif total_worked_hours > 0 and eta_hours == 0:
-                efficiency_pct = 100.0
-            else:  # total_worked_hours == 0 and eta_hours == 0
-                efficiency_pct = 100.0
+                if status == "Completed":
+                    if total_worked_hours > 0:
+                        efficiency_pct = (eta_hours / total_worked_hours) * 100
+                    else:
+                        efficiency_pct = 100.0
+                else:
+                    efficiency_pct = 0.0
+                    
+                efficiency_pct = round(efficiency_pct, 1)
                 
-            efficiency_pct = round(efficiency_pct, 1)
-            
-            tasks_list.append({
-                "task_id": t_info["task_id"],
-                "task_title": t_info["task_title"],
-                "time_worked_today_hours": round(worked_today_hours, 2),
-                "eta_hours": eta_hours,
-                "efficiency_percent": efficiency_pct,
-                "status": t_info["status"],
-                "is_running": t_info.get("is_running", False)
-            })
-            
-            if t_info["time_worked_today_seconds"] > 0:
-                task_efficiencies_worked_today.append(efficiency_pct)
+                tasks_list.append({
+                    "task_id": t_info["task_id"],
+                    "task_title": t_info["task_title"],
+                    "time_worked_today_hours": round(worked_today_hours, 2),
+                    "eta_hours": eta_hours,
+                    "efficiency_percent": efficiency_pct,
+                    "status": t_info["status"],
+                    "is_running": t_info.get("is_running", False)
+                })
                 
-        # In Progress count is the number of tasks worked on today
-        inprogress_count = len(task_efficiencies_worked_today)
-        
-        # Calculate daily user-level efficiency with 8-hour workday target progress
-        total_worked_today_hours = round(total_time_worked_today / 3600.0, 2)
-        if total_worked_today_hours == 0.0:
-            daily_efficiency = 0.0
-        else:
-            if task_efficiencies_worked_today:
-                avg_task_efficiency = sum(task_efficiencies_worked_today) / len(task_efficiencies_worked_today)
+                if t_info["time_worked_today_seconds"] > 0:
+                    task_efficiencies_worked_today.append(efficiency_pct)
+                    
+            inprogress_count = len(task_efficiencies_worked_today)
+            total_worked_today_hours = round(total_time_worked_today / 3600.0, 2)
+            total_worked_seconds_range += total_time_worked_today
+            
+            # Initialize component metrics
+            time_util = 0.0
+            comp_rate = 100.0
+            task_eff = 0.0
+            
+            if total_worked_today_hours == 0.0:
+                daily_efficiency = 0.0
             else:
-                avg_task_efficiency = 100.0
+                # 1. Time Utilization
+                if total_login_hours > 0:
+                    time_util = min(100.0, (total_worked_today_hours / total_login_hours) * 100.0)
+                else:
+                    time_util = 100.0
                 
-            scale_factor = min(1.0, total_worked_today_hours / 8.0)
-            daily_efficiency = round(avg_task_efficiency * scale_factor, 1)
+                # 2. Completion Rate
+                total_assigned_today = completed_count + pending_count
+                if total_assigned_today > 0:
+                    comp_rate = (completed_count / total_assigned_today) * 100.0
+                else:
+                    comp_rate = 100.0
+                    
+                # 3. Tracked Task Efficiency
+                if task_efficiencies_worked_today:
+                    task_eff = sum(task_efficiencies_worked_today) / len(task_efficiencies_worked_today)
+                else:
+                    task_eff = 0.0
+                
+                # Combined Overall Efficiency
+                daily_efficiency = round(0.3 * time_util + 0.3 * comp_rate + 0.4 * task_eff, 1)
+                daily_efficiencies.append(daily_efficiency)
+                time_utils_list.append(time_util)
+                comp_rates_list.append(comp_rate)
+                task_effs_list.append(task_eff)
+                
+            workload_health = "Healthy"
+            if total_worked_today_hours > 10.0:
+                workload_health = "Critical Overtime"
+            elif total_worked_today_hours > 8.0:
+                workload_health = "Overworked"
+            elif total_worked_today_hours == 0.0 and pending_count > 0:
+                workload_health = "Idle"
+                
+            if num_days == 1 or total_worked_today_hours > 0 or login_time is not None:
+                days_data.append({
+                    "date": d.isoformat(),
+                    "worked_hours": total_worked_today_hours,
+                    "daily_efficiency": daily_efficiency,
+                    "inprogress_count": inprogress_count,
+                    "completed_count": completed_count,
+                    "pending_count": pending_count,
+                    "tasks": [t for t in tasks_list if t["time_worked_today_hours"] > 0 or t["is_running"]],
+                    "workload_health": workload_health,
+                    "login_time": login_time,
+                    "logout_time": logout_time,
+                    "total_login_hours": total_login_hours,
+                    "total_break_hours": total_break_hours,
+                    "eff_time_utilization": round(time_util, 1),
+                    "eff_completion_rate": round(comp_rate, 1),
+                    "eff_task_efficiency": round(task_eff, 1)
+                })
+                
+        total_worked_hours_range = round(total_worked_seconds_range / 3600.0, 2)
+        avg_efficiency_range = round(sum(daily_efficiencies) / len(daily_efficiencies), 1) if daily_efficiencies else 0.0
+        
+        # Latest pending count at end of range
+        latest_pending_count = 0
+        if assigned_tasks:
+            latest_pending = [
+                t for t in assigned_tasks
+                if t.created_at <= range_end_dt and (t.status != "Completed" or (t.updated_at and t.updated_at > range_end_dt))
+            ]
+            latest_pending_count = len(latest_pending)
             
-        # Custom analysis logic: workload health
-        workload_health = "Healthy"
-        if total_worked_today_hours > 10.0:
-            workload_health = "Critical Overtime"
-        elif total_worked_today_hours > 8.0:
-            workload_health = "Overworked"
-        elif total_worked_today_hours == 0.0 and pending_count > 0:
-            workload_health = "Idle"
+        # workload health for the range
+        workload_health_range = "Healthy"
+        avg_worked_hours = total_worked_hours_range / len(dates_in_range) if dates_in_range else 0.0
+        if avg_worked_hours > 10.0:
+            workload_health_range = "Critical Overtime"
+        elif avg_worked_hours > 8.0:
+            workload_health_range = "Overworked"
+        elif total_worked_hours_range == 0.0 and latest_pending_count > 0:
+            workload_health_range = "Idle"
             
+        # Compute range-level component averages
+        avg_time_util = round(sum(time_utils_list) / len(time_utils_list), 1) if time_utils_list else 0.0
+        avg_comp_rate = round(sum(comp_rates_list) / len(comp_rates_list), 1) if comp_rates_list else 100.0
+        avg_task_eff = round(sum(task_effs_list) / len(task_effs_list), 1) if task_effs_list else 0.0
+
         report_data.append({
             "user_id": u.id,
             "user_name": u.name,
-            "total_worked_hours": total_worked_today_hours,
-            "daily_efficiency": daily_efficiency,
-            "inprogress_count": inprogress_count,
-            "completed_count": completed_count,
-            "pending_count": pending_count,
-            "tasks": tasks_list,
-            "workload_health": workload_health
+            "total_worked_hours": total_worked_hours_range,
+            "total_login_hours": round(total_login_hours_range, 2),
+            "total_break_hours": round(total_break_hours_range, 2),
+            "daily_efficiency": avg_efficiency_range,
+            "inprogress_count": len(unique_tasks_worked_range),
+            "completed_count": total_completed_range,
+            "pending_count": latest_pending_count,
+            "workload_health": workload_health_range,
+            "eff_time_utilization": avg_time_util,
+            "eff_completion_rate": avg_comp_rate,
+            "eff_task_efficiency": avg_task_eff,
+            "days": days_data
         })
         
     return report_data

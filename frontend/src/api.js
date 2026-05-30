@@ -30,21 +30,46 @@ export function assetUrl(path) {
   return `${ASSET_URL}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
-async function request(path, options = {}) {
-  const headers = { ...(options.headers || {}) };
-  if (!(options.body instanceof FormData)) headers["Content-Type"] = "application/json";
-  const token = tokenStore.get();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${API_URL}${path}`, { ...options, headers });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const message = formatDetail(body.detail);
-    showError(message);
-    const error = new Error(message);
-    error.notified = true;
-    throw error;
+let activeRequests = 0;
+
+function updateLoadingState(delta) {
+  const prevActive = activeRequests;
+  activeRequests = Math.max(0, activeRequests + delta);
+  if (prevActive === 0 && activeRequests > 0) {
+    window.dispatchEvent(new CustomEvent("erp:loading", { detail: { loading: true } }));
+  } else if (prevActive > 0 && activeRequests === 0) {
+    window.dispatchEvent(new CustomEvent("erp:loading", { detail: { loading: false } }));
   }
-  return res.json();
+}
+
+async function request(path, options = {}) {
+  const isGet = !options.method || options.method.toUpperCase() === "GET";
+  const isSilent = isGet && (
+    path.includes("/notifications") || 
+    path.includes("/time/today") || 
+    path.includes("/chat")
+  );
+
+  if (!isSilent) updateLoadingState(1);
+
+  try {
+    const headers = { ...(options.headers || {}) };
+    if (!(options.body instanceof FormData)) headers["Content-Type"] = "application/json";
+    const token = tokenStore.get();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`${API_URL}${path}`, { ...options, headers });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const message = formatDetail(body.detail);
+      showError(message);
+      const error = new Error(message);
+      error.notified = true;
+      throw error;
+    }
+    return await res.json();
+  } finally {
+    if (!isSilent) updateLoadingState(-1);
+  }
 }
 
 function requestBody(data) {
@@ -52,23 +77,28 @@ function requestBody(data) {
 }
 
 async function download(path, filename) {
-  const headers = {};
-  const token = tokenStore.get();
-  if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch(`${API_URL}${path}`, { headers });
-  if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const message = formatDetail(body.detail);
-    showError(message);
-    throw new Error(message);
+  updateLoadingState(1);
+  try {
+    const headers = {};
+    const token = tokenStore.get();
+    if (token) headers.Authorization = `Bearer ${token}`;
+    const res = await fetch(`${API_URL}${path}`, { headers });
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      const message = formatDetail(body.detail);
+      showError(message);
+      throw new Error(message);
+    }
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  } finally {
+    updateLoadingState(-1);
   }
-  const blob = await res.blob();
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = filename;
-  link.click();
-  URL.revokeObjectURL(url);
 }
 
 export const api = {
@@ -158,6 +188,7 @@ export const api = {
   updateTask: (id, data) => request(`/tasks/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   startTaskTimer: (id, workType) => request(`/tasks/${id}/timer/start?work_type=${encodeURIComponent(workType)}`, { method: "POST" }),
   stopTaskTimer: (id, workDescription, workType = "") => request(`/tasks/${id}/timer/stop?work_description=${encodeURIComponent(workDescription)}${workType ? `&work_type=${encodeURIComponent(workType)}` : ""}`, { method: "POST" }),
+  stopActiveTaskTimer: () => request("/tasks/timer/stop-active", { method: "POST" }),
   addTaskComment: (id, comment) => request(`/tasks/${id}/comments`, { method: "POST", body: JSON.stringify({ comment }) }),
   taskNotifications: () => request("/tasks/notifications"),
   markTaskNotificationRead: (id) => request(`/tasks/notifications/${id}/read`, { method: "POST" }),

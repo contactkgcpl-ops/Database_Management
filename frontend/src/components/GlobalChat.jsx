@@ -3,6 +3,24 @@ import { MessageSquare, X, Send } from "lucide-react";
 import { api } from "../api";
 import { useAuth } from "../context/AuthContext";
 
+function parseUTCDate(val) {
+  if (!val) return null;
+  if (val instanceof Date) return val;
+  if (typeof val === "string") {
+    let str = val.trim();
+    if (str.endsWith("Z") || /[+-]\d{2}:\d{2}$/.test(str)) {
+      return new Date(str);
+    }
+    if (str.includes(":")) {
+      if (str.includes(" ") && !str.includes("T")) {
+        str = str.replace(" ", "T");
+      }
+      return new Date(str + "Z");
+    }
+  }
+  return new Date(val);
+}
+
 export function GlobalChat() {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
@@ -279,7 +297,7 @@ export function GlobalChat() {
                   {msg.message}
                 </div>
                 <div style={{ fontSize: "10px", color: "#999", textAlign: "right", marginTop: "4px" }}>
-                  {new Date(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                  {parseUTCDate(msg.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                 </div>
               </div>
             );

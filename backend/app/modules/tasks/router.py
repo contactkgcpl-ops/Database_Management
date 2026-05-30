@@ -225,6 +225,21 @@ def update_task(
     return map_task(task, db, user)
 
 
+@router.post("/timer/stop-active", response_model=dict)
+def stop_active_timer(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("tasks.view")),
+):
+    active_log = (
+        db.query(TaskTimerLog)
+        .filter(TaskTimerLog.user_id == user.id, TaskTimerLog.end_time == None)
+        .first()
+    )
+    if active_log:
+        services.stop_task_timer(db, active_log.task_id, user, "Auto-stopped on app logout")
+    return {"status": "ok"}
+
+
 @router.post("/{task_id}/timer/start", response_model=TaskTimerLogOut)
 def start_timer(
     task_id: int,
@@ -269,21 +284,33 @@ def add_comment(
 
 @router.get("/reports/staff", response_model=list[dict])
 def get_staff_report(
+    start_date: str | None = Query(None),
+    end_date: str | None = Query(None),
     work_date: str | None = Query(None),
     user_ids: str | None = Query(None),
     db: Session = Depends(get_db),
     user: User = Depends(require_permission("tasks.report")),
 ):
     from datetime import date
-    target_date = date.today()
-    if work_date:
-        try:
-            target_date = date.fromisoformat(work_date)
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
-            
+    
+    # Fallback to work_date if start_date/end_date are not provided
+    if work_date and not start_date and not end_date:
+        start_date = work_date
+        end_date = work_date
+        
+    if not start_date:
+        start_date = date.today().isoformat()
+    if not end_date:
+        end_date = start_date
+        
+    try:
+        start_d = date.fromisoformat(start_date)
+        end_d = date.fromisoformat(end_date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
+        
     parsed_user_ids = None
     if user_ids:
         parsed_user_ids = [int(x) for x in user_ids.split(",") if x.strip().isdigit()]
         
-    return services.get_staff_report(db, target_date, parsed_user_ids, current_user=user)
+    return services.get_staff_report(db, start_d, end_d, parsed_user_ids, current_user=user)

@@ -71,6 +71,14 @@ export function AppLayout({ page, setPage }) {
   const [fetchTime, setFetchTime] = useState(Date.now());
   const [timeTick, setTimeTick] = useState(0);
   const [lastNotifiedHour, setLastNotifiedHour] = useState(0);
+  const [taskDetailId, setTaskDetailId] = useState(null);
+  const [requirementDetailId, setRequirementDetailId] = useState(null);
+
+  const navigateToPage = (newPage) => {
+    setTaskDetailId(null);
+    setRequirementDetailId(null);
+    setPage(newPage);
+  };
   const canUseTime = user.permissions.some((permission) => ["time.view", "time.break", "time.manage"].includes(permission));
   const canOpen = (item) => user.permissions.includes(item.permission) || user.permissions.includes(item.alternatePermission);
   const allowed = useMemo(() => {
@@ -174,6 +182,8 @@ export function AppLayout({ page, setPage }) {
         setPage("hourly-reports");
         return;
       }
+      // Stop active task timer
+      await api.stopActiveTaskTimer().catch(() => {});
     } catch (err) {
       console.error(err);
     }
@@ -208,7 +218,7 @@ export function AppLayout({ page, setPage }) {
                       {item.children.map((child) => {
                         const ChildIcon = child.icon;
                         return (
-                          <button className={page === child.page ? "active" : ""} key={child.key} onClick={() => setPage(child.page)} title={child.label}>
+                          <button className={page === child.page ? "active" : ""} key={child.key} onClick={() => navigateToPage(child.page)} title={child.label}>
                             <ChildIcon size={15} />
                             <span>{child.label}</span>
                           </button>
@@ -220,7 +230,7 @@ export function AppLayout({ page, setPage }) {
               );
             }
             return (
-              <button className={page === item.page ? "active" : ""} key={item.key} onClick={() => setPage(item.page)} title={item.label}>
+              <button className={page === item.page ? "active" : ""} key={item.key} onClick={() => navigateToPage(item.page)} title={item.label}>
                 <Icon size={16} />
                 <span>{item.label}</span>
                 <ChevronRight size={15} />
@@ -252,7 +262,21 @@ export function AppLayout({ page, setPage }) {
                 <Coffee size={15} /> Go to Break
               </button>
             ) : null}
-            <NotificationBell onNavigate={(dest) => setPage(dest)} />
+            <NotificationBell 
+              onNavigate={(dest, paramId) => {
+                if (dest === "tasks") {
+                  setTaskDetailId(paramId);
+                  setRequirementDetailId(null);
+                } else if (dest === "requirements") {
+                  setRequirementDetailId(paramId);
+                  setTaskDetailId(null);
+                } else {
+                  setTaskDetailId(null);
+                  setRequirementDetailId(null);
+                }
+                setPage(dest);
+              }} 
+            />
             <div className="user-chip">
               {user.profile_image_url ? (
                 <img src={assetUrl(user.profile_image_url)} alt={user.name} className="avatar" style={{ objectFit: 'cover' }} />
@@ -272,10 +296,14 @@ export function AppLayout({ page, setPage }) {
           </div>
         </header>
         <CurrentPage
-          onBack={() => { setPage("companies"); setEditingId(null); }}
-          setPage={setPage}
+          onBack={() => { navigateToPage("companies"); setEditingId(null); }}
+          setPage={navigateToPage}
           editingId={editingId}
           setEditingId={setEditingId}
+          taskDetailId={taskDetailId}
+          setTaskDetailId={setTaskDetailId}
+          requirementDetailId={requirementDetailId}
+          setRequirementDetailId={setRequirementDetailId}
         />
         {canUseTime && timeLog?.status === "on_break" && (
           <div className="break-screen">

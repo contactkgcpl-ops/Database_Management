@@ -101,13 +101,13 @@ export function AppLayout({ page, setPage }) {
     let cancelled = false;
     const loadToday = () => {
       api.todayTime()
-        .then((data) => { 
+        .then((data) => {
           if (!cancelled) {
             setTimeLog(data);
             setFetchTime(Date.now());
           }
         })
-        .catch(() => {});
+        .catch(() => { });
     };
     loadToday();
     const refreshId = window.setInterval(loadToday, 30000);
@@ -183,7 +183,7 @@ export function AppLayout({ page, setPage }) {
         return;
       }
       // Stop active task timer
-      await api.stopActiveTaskTimer().catch(() => {});
+      await api.stopActiveTaskTimer().catch(() => { });
     } catch (err) {
       console.error(err);
     }
@@ -262,7 +262,7 @@ export function AppLayout({ page, setPage }) {
                 <Coffee size={15} /> Go to Break
               </button>
             ) : null}
-            <NotificationBell 
+            <NotificationBell
               onNavigate={(dest, paramId) => {
                 if (dest === "tasks") {
                   setTaskDetailId(paramId);
@@ -275,7 +275,7 @@ export function AppLayout({ page, setPage }) {
                   setRequirementDetailId(null);
                 }
                 setPage(dest);
-              }} 
+              }}
             />
             <div className="user-chip">
               {user.profile_image_url ? (
@@ -285,10 +285,10 @@ export function AppLayout({ page, setPage }) {
               )}
               <strong>{user.name}</strong>
             </div>
-            <button 
-              type="button" 
-              onClick={handleLogout} 
-              title="Logout" 
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Logout"
               style={{ color: '#ef4444', border: 'none', background: 'transparent', cursor: 'pointer', padding: '6px', display: 'flex', alignItems: 'center' }}
             >
               <LogOut size={18} />
@@ -319,7 +319,8 @@ export function AppLayout({ page, setPage }) {
         )}
         <GlobalChat />
       </section>
-      <style dangerouslySetInnerHTML={{ __html: `
+      <style dangerouslySetInnerHTML={{
+        __html: `
         .time-chip, .break-button {
           min-height: 34px;
           display: inline-flex;

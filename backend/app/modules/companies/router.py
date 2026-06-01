@@ -190,3 +190,19 @@ def get_company_history_endpoint(
         **h.__dict__,
         "user_name": h.user.name if h.user else None
     } for h in history]
+
+
+@router.post("/bulk-delete")
+def bulk_delete_companies(
+    payload: list[int],
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("companies.manage")),
+):
+    deleted_count = 0
+    for company_id in payload:
+        company = get_company(db, company_id)
+        if company:
+            delete_company(db, company)
+            deleted_count += 1
+    return {"ok": True, "deleted_count": deleted_count}
+

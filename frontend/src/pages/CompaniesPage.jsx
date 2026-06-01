@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Columns3, FileUp, GripVertical, MoreVertical, Pencil, Plus, Ruler, Save, Search, Trash2, X } from "lucide-react";
+import { Columns3, FileUp, GripVertical, MoreVertical, Pencil, Plus, Ruler, Save, Search, Trash2, X, SquareCheckBig } from "lucide-react";
 import { GridFilterDropdown } from "../components/GridFilterDropdown";
 import { api } from "../api";
 import { useNotify } from "../components/NotificationProvider";
@@ -43,6 +43,33 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
   const [draftColumnWidths, setDraftColumnWidths] = useState({});
   const [columnFilters, setColumnFilters] = useState({});
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
+  const [bulkMode, setBulkMode] = useState(false);
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
+
+  const toggleCompanySelection = (id) => {
+    const cid = Number(id);
+    setSelectedCompanyIds((current) =>
+      current.map(Number).includes(cid)
+        ? current.filter((x) => Number(x) !== cid)
+        : [...current, cid]
+    );
+  };
+
+  const submitBulkDelete = async () => {
+    if (!selectedCompanyIds.length) {
+      notify("Select at least one company", "error");
+      return;
+    }
+    if (!window.confirm(`Delete the ${selectedCompanyIds.length} selected companies?`)) return;
+    try {
+      await api.bulkDeleteCompanies(selectedCompanyIds);
+      notify("Companies deleted successfully", "success");
+      setSelectedCompanyIds([]);
+      companies.reload();
+    } catch (err) {
+      notify("Failed to delete selected companies", "error");
+    }
+  };
 
   const companies = useLoad(() => api.companies(q), [q]);
   const properties = useLoad(() => api.properties(), []);
@@ -177,6 +204,18 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
               </div>
             ) : (
               <div className="row-actions">
+                <button
+                  type="button"
+                  className={`secondary icon-only menu-trigger ${bulkMode ? "active" : ""}`}
+                  onClick={() => {
+                    setBulkMode((current) => !current);
+                    setSelectedCompanyIds([]);
+                    setActionsMenuOpen(false);
+                  }}
+                  title="Bulk delete actions"
+                >
+                  <SquareCheckBig size={18} />
+                </button>
                 <button type="button" className="icon-button compact-primary" onClick={() => setPage("add-company")}><Plus size={16} /> Add Company</button>
                 <button type="button" className="secondary icon-button" onClick={() => setPage("import-companies")}><FileUp size={16} /> Import</button>
                 <button type="button" className="secondary icon-only menu-trigger" onClick={() => setActionsMenuOpen(!actionsMenuOpen)}><MoreVertical size={18} /></button>
@@ -197,10 +236,20 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
           <div className="muted">No companies found</div>
         ) : (
           <>
+            {bulkMode && (
+              <div className="bulk-action-bar" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '12px' }}>
+                <button type="button" className="bulk-link" onClick={() => setSelectedCompanyIds(filteredCompanies.map((c) => Number(c.id)))} style={{ background: 'none', border: 'none', color: '#176b5b', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Select all</button>
+                <button type="button" className="bulk-link" onClick={() => setSelectedCompanyIds([])} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Unselect all</button>
+                <strong style={{ fontSize: '13px', color: '#1e293b' }}>{selectedCompanyIds.length}</strong>
+                <span style={{ fontSize: '13px', color: '#64748b' }}>Items Selected</span>
+                <button type="button" className="bulk-submit danger" onClick={submitBulkDelete} style={{ marginLeft: "auto", background: "#ef4444", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "600", cursor: "pointer" }}>Delete Selected</button>
+              </div>
+            )}
             <div className="table-wrap">
               <table className="company-table">
                 <thead>
                   <tr>
+                    {bulkMode && <th style={{ width: "40px" }} />}
                     {gridProperties.map((p) => (
                       <th key={p.field_key} style={{ width: `${getColumnWidth(p)}px` }}>
                         <button type="button" className="sort-header" onClick={() => toggleCompanySort(p.field_key)}>
@@ -214,6 +263,7 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
                     {canManage && <th style={{ width: "100px" }}>Actions</th>}
                   </tr>
                   <tr className="filter-row">
+                    {bulkMode && <th />}
                     {gridProperties.map((p) => {
                       const filterVal = columnFilters[p.field_key] || "";
 
@@ -262,6 +312,16 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
 
                     return (
                       <tr key={c.id} className={rowClassName}>
+                        {bulkMode && (
+                          <td style={{ textAlign: "center" }}>
+                            <input
+                              type="checkbox"
+                              checked={selectedCompanyIds.map(Number).includes(Number(c.id))}
+                              onChange={() => toggleCompanySelection(c.id)}
+                              style={{ width: "16px", height: "16px", cursor: "pointer", accentColor: "#176b5b" }}
+                            />
+                          </td>
+                        )}
                         {gridProperties.map((p) => (
                           <td key={p.field_key}>
                             <span className="cell-text" title={getCompanyPropertyValue(c, p)}>

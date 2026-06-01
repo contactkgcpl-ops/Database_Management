@@ -45,8 +45,8 @@ function updateLoadingState(delta) {
 async function request(path, options = {}) {
   const isGet = !options.method || options.method.toUpperCase() === "GET";
   const isSilent = isGet && (
-    path.includes("/notifications") || 
-    path.includes("/time/today") || 
+    path.includes("/notifications") ||
+    path.includes("/time/today") ||
     path.includes("/chat")
   );
 
@@ -129,6 +129,7 @@ export const api = {
   myLeads: (q = "") => request(`/companies/my${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   createLead: (data) => request("/leads", { method: "POST", body: JSON.stringify(data) }),
   deleteCompany: (id) => request(`/companies/${id}`, { method: "DELETE" }),
+  bulkDeleteCompanies: (ids) => request("/companies/bulk-delete", { method: "POST", body: JSON.stringify(ids) }),
   updateCompanyInline: (companyId, payload) => request(`/companies/${companyId}/inline-update`, { method: "PUT", body: JSON.stringify(payload) }),
   getCompanyHistory: (companyId) => request(`/companies/${companyId}/history`),
   myPendingFollowups: () => request("/leads/followups/my-pending"),

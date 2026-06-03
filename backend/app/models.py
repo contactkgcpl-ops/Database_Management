@@ -382,3 +382,41 @@ class TaskNotification(Base, TimestampMixin):
 
     task: Mapped[Task] = relationship()
 
+
+class Vendor(Base, TimestampMixin):
+    __tablename__ = "vendors"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    company_name: Mapped[str] = mapped_column(String(180), index=True)
+    vendor_name: Mapped[str] = mapped_column(String(180), index=True)
+    email_id: Mapped[str | None] = mapped_column(String(160))
+    city: Mapped[str | None] = mapped_column(String(100))
+    status: Mapped[str | None] = mapped_column(String(50))
+    website: Mapped[str | None] = mapped_column(String(255))
+    quotation_updated_date: Mapped[date | None] = mapped_column(Date)
+    created_by: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
+
+    creator: Mapped["User"] = relationship(foreign_keys=[created_by])
+    contact_numbers: Mapped[list["VendorContactNumber"]] = relationship(cascade="all, delete-orphan", back_populates="vendor")
+    products: Mapped[list["VendorProduct"]] = relationship(cascade="all, delete-orphan", back_populates="vendor")
+
+
+class VendorContactNumber(Base, TimestampMixin):
+    __tablename__ = "vendor_contact_numbers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    vendor_id: Mapped[int] = mapped_column(ForeignKey("vendors.id", ondelete="CASCADE"), index=True)
+    contact: Mapped[str] = mapped_column(String(50), index=True)
+
+    vendor: Mapped[Vendor] = relationship(back_populates="contact_numbers")
+
+
+class VendorProduct(Base, TimestampMixin):
+    __tablename__ = "vendor_products"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    vendor_id: Mapped[int] = mapped_column(ForeignKey("vendors.id", ondelete="CASCADE"), index=True)
+    product: Mapped[str] = mapped_column(String(180), index=True)
+
+    vendor: Mapped[Vendor] = relationship(back_populates="products")
+

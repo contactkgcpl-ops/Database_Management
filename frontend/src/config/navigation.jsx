@@ -1,4 +1,4 @@
-import { Building2, ClipboardList, Clock, LayoutDashboard, ListTree, Shield, Users, Sparkles } from "lucide-react";
+import { Building2, ClipboardList, Clock, LayoutDashboard, ListTree, Shield, Users, Sparkles, ShoppingCart } from "lucide-react";
 
 export const navigation = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, page: "dashboard", permission: "dashboard.view" },
@@ -36,6 +36,14 @@ export const navigation = [
     icon: Sparkles,
     children: [
       { key: "inquiries", label: "Inquiries", icon: Sparkles, page: "inquiries", permission: "inquiry.view" },
+    ],
+  },
+  {
+    key: "purchase",
+    label: "Purchase",
+    icon: ShoppingCart,
+    children: [
+      { key: "vendors", label: "Vendors", icon: Users, page: "vendors", permission: "vendors.view" },
     ],
   },
   { key: "properties", label: "Properties", icon: ListTree, page: "properties", permission: "properties.view" },

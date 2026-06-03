@@ -408,3 +408,41 @@ class TaskOut(BaseModel):
     
     model_config = ConfigDict(from_attributes=True)
 
+
+class VendorContactNumberOut(BaseModel):
+    id: int
+    vendor_id: int
+    contact: str
+    model_config = ConfigDict(from_attributes=True)
+
+
+class VendorBase(BaseModel):
+    company_name: str = Field(min_length=1, max_length=180)
+    vendor_name: str = Field(min_length=1, max_length=180)
+    email_id: str | None = None
+    city: str | None = None
+    status: str | None = None
+    website: str | None = None
+    quotation_updated_date: date | None = None
+
+
+class VendorCreate(VendorBase):
+    products: list[str] = []
+    contact_numbers: list[str] = []
+
+
+class VendorUpdate(VendorBase):
+    products: list[str] = []
+    contact_numbers: list[str] = []
+
+
+class VendorOut(VendorBase):
+    id: int
+    created_by: int | None = None
+    created_at: datetime
+    updated_at: datetime
+    creator_name: str | None = None
+    products: list[str] = []
+    contact_numbers: list[str] = []
+    model_config = ConfigDict(from_attributes=True)
+

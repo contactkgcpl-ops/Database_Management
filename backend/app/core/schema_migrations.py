@@ -478,6 +478,40 @@ def migrate_lead_manage_inquiry_field(db: Session) -> None:
             db.execute(text("ALTER TABLE lead_manage ADD COLUMN is_inquiry BOOLEAN NOT NULL DEFAULT 0"))
         db.commit()
 
+def migrate_vendors_schema(db: Session) -> None:
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    dialect = engine.dialect.name
+
+    if "vendors" in tables:
+        columns = {column["name"] for column in inspector.get_columns("vendors")}
+        if "products" in columns and dialect == "mysql":
+            try:
+                db.execute(text("ALTER TABLE vendors DROP COLUMN products"))
+                db.commit()
+            except Exception as e:
+                print(f"Error dropping products from vendors: {e}")
+
+    if "vendor_contact_numbers" in tables:
+        columns = {column["name"] for column in inspector.get_columns("vendor_contact_numbers")}
+        if "contact" not in columns:
+            if "contact_number" in columns:
+                try:
+                    if dialect == "mysql":
+                        db.execute(text("ALTER TABLE vendor_contact_numbers CHANGE COLUMN contact_number contact VARCHAR(50)"))
+                    else:
+                        db.execute(text("ALTER TABLE vendor_contact_numbers RENAME COLUMN contact_number TO contact"))
+                    db.commit()
+                except Exception as e:
+                    print(f"Error renaming contact_number to contact: {e}")
+            else:
+                try:
+                    db.execute(text("ALTER TABLE vendor_contact_numbers ADD COLUMN contact VARCHAR(50)"))
+                    db.commit()
+                except Exception as e:
+                    print(f"Error adding contact column: {e}")
+
+
 def migrate_all(db: Session) -> None:
     # 1. First, update the 'properties' table schema so ORM queries don't fail
     migrate_property_filter_type(db)
@@ -497,3 +531,5 @@ def migrate_all(db: Session) -> None:
     cleanup_duplicate_company_name_property(db)
     migrate_lead_manage_inquiry_field(db)
     consolidate_product_to_requirement(db)
+    migrate_vendors_schema(db)
+

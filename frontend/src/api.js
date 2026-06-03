@@ -200,4 +200,10 @@ export const api = {
     ).toString();
     return request(`/tasks/reports/staff${q ? `?${q}` : ""}`);
   },
+  importUpsertCompany: (data) => request("/companies/import-upsert", { method: "POST", body: JSON.stringify(data) }),
+  vendors: (q = "") => request(`/vendors${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  vendor: (id) => request(`/vendors/${id}`),
+  createVendor: (data) => request("/vendors", { method: "POST", body: JSON.stringify(data) }),
+  updateVendor: (id, data) => request(`/vendors/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteVendor: (id) => request(`/vendors/${id}`, { method: "DELETE" }),
 };

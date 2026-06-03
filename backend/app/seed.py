@@ -35,6 +35,8 @@ DEFAULT_PERMISSIONS = [
     ("tasks.create", "Create Tasks", "staff-management", "Staff Management", 101),
     ("tasks.manage", "Manage Tasks", "staff-management", "Staff Management", 102),
     ("tasks.report", "View Staff Report", "staff-management", "Staff Management", 103),
+    ("vendors.view", "View Vendors", "purchase", "Purchase", 110),
+    ("vendors.manage", "Manage Vendors", "purchase", "Purchase", 111),
 ]
 
 DEFAULT_PROPERTIES = [

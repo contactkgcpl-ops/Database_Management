@@ -8,6 +8,8 @@ import { AddCompanyPage } from "../pages/AddCompanyPage";
 import { AssignLeadsPage } from "../pages/AssignLeadsPage";
 import { CompaniesPage } from "../pages/CompaniesPage";
 import { ImportCompaniesPage } from "../pages/ImportCompaniesPage";
+import { BulkEditCompaniesPage } from "../pages/BulkEditCompaniesPage";
+import { VendorsPage } from "../pages/VendorsPage";
 import { DashboardPage } from "../pages/DashboardPage";
 import { PropertiesPage } from "../pages/PropertiesPage";
 import { RolesPage } from "../pages/RolesPage";
@@ -32,6 +34,8 @@ const pageMap = {
   companies: CompaniesPage,
   "add-company": AddCompanyPage,
   "import-companies": ImportCompaniesPage,
+  "bulk-edit-companies": BulkEditCompaniesPage,
+  vendors: VendorsPage,
   "assign-leads": AssignLeadsPage,
   "my-leads": MyLeadsPage,
   "today-followup": FollowUpsPage,
@@ -89,6 +93,8 @@ export function AppLayout({ page, setPage }) {
   const CurrentPage = pageMap[page] || DashboardPage;
   const pageLabel = page === "add-company" ? "Add Company" :
     page === "import-companies" ? "Import Companies" :
+    page === "bulk-edit-companies" ? "Bulk Edit Companies" :
+    page === "vendors" ? "Vendors" :
       (flatNavigation.find((item) => item.page === page)?.label || "Dashboard");
   useEffect(() => {
     const activeGroup = allowed.find((item) => item.children?.some((child) => child.page === page));

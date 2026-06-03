@@ -56,6 +56,7 @@ export const navigation = [
     icon: Users,
     children: [
       { key: "tasks", label: "Tasks", icon: ClipboardList, page: "tasks", permission: "tasks.view" },
+      { key: "requirements", label: "Requirement", icon: ClipboardList, page: "requirements", permission: "requirement.view" },
       { key: "staff-report", label: "Staff Report", icon: ClipboardList, page: "staff-report", permission: "tasks.report" },
     ],
   },

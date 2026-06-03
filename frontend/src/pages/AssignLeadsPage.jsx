@@ -269,38 +269,22 @@ export function AssignLeadsPage() {
       .filter(Boolean));
   }, [companies.data, cityProperty]);
 
-  // Filter & Sort Logic
   const filteredData = useMemo(() => {
     let data = companies.data || [];
 
-    // Column Filters
-    Object.entries(columnFilters).forEach(([key, val]) => {
-      if (!val) return;
-      if (key === "company_name") {
-        data = data.filter(c => String(c.company_name || "").toLowerCase().includes(String(val).toLowerCase()));
-        return;
-      }
-      const prop = properties.data?.find(p => p.field_key === key);
-      if (!prop) return;
+    data = data.filter((company) =>
+      gridProperties.every((property) => {
+        const filter = columnFilters[property.field_key];
+        if (!filter || (Array.isArray(filter) && filter.length === 0)) return true;
 
-      data = data.filter(c => {
-        const cellVal = String(getVal(c, prop)).toLowerCase();
-        if (Array.isArray(val)) {
-          return val.length === 0 || val.some(v => cellVal.includes(String(v).toLowerCase()));
+        const cellVal = String(getVal(company, property)).toLowerCase();
+
+        if (Array.isArray(filter)) {
+          return filter.some(f => cellVal.includes(String(f).toLowerCase()));
         }
-        return cellVal.includes(String(val).toLowerCase());
-      });
-    });
-
-    const assignedToFilter = columnFilters.assigned_to;
-    if (Array.isArray(assignedToFilter) && assignedToFilter.length) {
-      data = data.filter((company) => assignedToFilter.includes(getAssignedToName(company)));
-    }
-
-    const assignedByFilter = columnFilters.assigned_by_name;
-    if (Array.isArray(assignedByFilter) && assignedByFilter.length) {
-      data = data.filter((company) => assignedByFilter.includes(company.assigned_by_name || "System"));
-    }
+        return cellVal.includes(String(filter).toLowerCase());
+      })
+    );
 
     // Sort
     if (sort.key) {
@@ -315,7 +299,7 @@ export function AssignLeadsPage() {
     }
 
     return data;
-  }, [companies.data, columnFilters, sort, properties.data, users.data]);
+  }, [companies.data, columnFilters, sort, properties.data, users.data, gridProperties]);
 
   const totalPages = Math.ceil(filteredData.length / pageSize);
   const visibleData = filteredData.slice((currentPage - 1) * pageSize, currentPage * pageSize);

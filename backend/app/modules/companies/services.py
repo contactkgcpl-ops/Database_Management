@@ -109,8 +109,16 @@ def update_company(db: Session, company: Company, payload: CompanyUpdate) -> Com
     validate_unique_properties(db, payload, exclude_company_id=company.id)
     dynamic_data, lead_dynamic_data = apply_company_payload(db, company, payload)
     
-    if payload.assigned_to is not None or lead_dynamic_data:
-        assign_company(db, company, payload.assigned_to, None, lead_dynamic_data)
+    if "assigned_to" in payload.model_fields_set:
+        assigned_to = payload.assigned_to
+        should_assign = True
+    else:
+        assignment = db.query(LeadManage).filter(LeadManage.company_id == company.id).first()
+        assigned_to = assignment.assigned_to_id if assignment else None
+        should_assign = bool(lead_dynamic_data)
+
+    if should_assign:
+        assign_company(db, company, assigned_to, None, lead_dynamic_data)
 
     db.commit()
     

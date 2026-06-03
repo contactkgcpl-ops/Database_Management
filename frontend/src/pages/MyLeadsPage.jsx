@@ -20,6 +20,7 @@ const MY_LEADS_STATIC_COLUMNS = [
 function getPropertyValue(record, property) {
   if (property.field_key === "company_name") return record.company_name || "";
   if (property.field_key === "assigned_by_name") return record.assigned_by_name || "";
+  if (property.field_key === "assigned_to") return record.assigned_user_name || "Not Assigned";
   const pv = record.property_values?.find((v) => v.field_key === property.field_key);
   return pv ? pv.value : "";
 }
@@ -446,7 +447,7 @@ export function MyLeadsPage() {
                       }
                       return (
                         <th key={`${p.field_key}-f`} style={{ width: `${getColumnWidth(p)}px`, minWidth: `${getColumnWidth(p)}px`, maxWidth: `${getColumnWidth(p)}px`, padding: "4px 8px" }}>
-                          {p.filter_type === "dropdown" || p.filter_type === "multiselect" ? (
+                          {p.field_key === "assigned_to" || p.field_key === "assigned_by_name" || p.filter_type === "dropdown" || p.filter_type === "multiselect" ? (
                             <GridFilterDropdown label={p.name} options={uniqueValues} value={columnFilters[p.field_key] || []} onChange={(val) => setColumnFilters({ ...columnFilters, [p.field_key]: val })} isMulti={true} />
                           ) : (
                             <input className="filter-input" placeholder={`Filter ${p.name}`} value={columnFilters[p.field_key] || ""} onChange={(e) => setColumnFilters({ ...columnFilters, [p.field_key]: e.target.value })} />

@@ -173,7 +173,7 @@ function RequirementModal({ open, onClose, onSaved, editData, users, notify }) {
               Cancel
             </button>
             <button type="submit" disabled={saving} style={{ backgroundColor: "#176b5b", color: "#fff", padding: "8px 18px", borderRadius: "6px", border: "none", cursor: "pointer", fontWeight: "600", display: "flex", alignItems: "center", gap: "6px" }}>
-              {editData ? "Save Changes" : "Add Task"}
+              {editData ? "Save Changes" : "Add Requirement"}
             </button>
           </div>
         </form>
@@ -520,7 +520,7 @@ export function RequirementsPage({ requirementDetailId, setRequirementDetailId }
           <label className="crm-search small inquiry-search" style={{ flex: 1, maxWidth: "360px" }}>
             <Search size={15} />
             <input
-              placeholder="Search Task..."
+              placeholder="Search Requirement..."
               value={q}
               onChange={e => { setQ(e.target.value); setPage(1); }}
             />
@@ -542,7 +542,7 @@ export function RequirementsPage({ requirementDetailId, setRequirementDetailId }
             onClick={() => { setEditReq(null); setShowAddModal(true); }}
             style={{ backgroundColor: "#176b5b", color: "#fff", display: "flex", alignItems: "center", gap: "6px", height: "36px", padding: "0 14px", borderRadius: "6px" }}
           >
-            <Plus size={16} /> Add Task
+            <Plus size={16} /> Add Requirement
           </button>
         </div>
       </div>

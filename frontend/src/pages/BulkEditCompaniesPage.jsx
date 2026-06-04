@@ -23,14 +23,34 @@ const normalizeCompanyName = (name) => {
         .replace(/(^_|_$)/g, "");
 };
 
+const splitCSVLine = (line) => {
+    const result = [];
+    let insideQuotes = false;
+    let currentToken = "";
+    
+    for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+            insideQuotes = !insideQuotes;
+        } else if (char === ',' && !insideQuotes) {
+            result.push(currentToken.trim());
+            currentToken = "";
+        } else {
+            currentToken += char;
+        }
+    }
+    result.push(currentToken.trim());
+    return result;
+};
+
 const parseCSV = (text) => {
     const lines = text.split(/\r?\n/).filter(line => line.trim());
     if (lines.length === 0) return { headers: [], rows: [] };
-    const headers = lines[0].split(",").map((h, i) => ({ id: `col_${i}`, label: h.trim() }));
+    const headers = splitCSVLine(lines[0]).map((h, i) => ({ id: `col_${i}`, label: h.trim().replace(/^"|"$/g, '') }));
     const rows = lines.slice(1).map((line, lineIndex) => {
-        const values = line.split(",");
+        const values = splitCSVLine(line);
         const row = headers.reduce((acc, header, i) => {
-            acc[header.id] = sanitizeValue(values[i]);
+            acc[header.id] = sanitizeValue(values[i]).replace(/^"|"$/g, '');
             return acc;
         }, {});
         row.row_id = `row_${lineIndex}_${Date.now()}_${Math.random().toString(36).substring(2, 5)}`;

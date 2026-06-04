@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from "react";
-import { Columns3, GripVertical, MoreVertical, Ruler, Save, Search, X, Plus, Phone, Mail, MessageCircle, History, Pencil, Sparkles, SquareCheckBig } from "lucide-react";
+import { Columns3, GripVertical, MoreVertical, Ruler, Save, Search, X, Plus, Phone, Mail, MessageCircle, History, Pencil, Sparkles, SquareCheckBig, Download } from "lucide-react";
 import { GridFilterDropdown } from "../components/GridFilterDropdown";
 import { ConnectedSourceActions } from "../components/ConnectedSourceActions";
 import { api } from "../api";
@@ -242,6 +242,28 @@ export function MyLeadsPage() {
     });
   }, [filteredLeads, gridProperties, leadSort]);
 
+  const exportLeads = () => {
+    const headers = gridProperties.map((p) => p.name);
+    const rows = sortedLeads.map((lead) =>
+      gridProperties.map((p) => {
+        if (p.field_key === "assigned_to") {
+          return lead.assigned_user_name || "Not Assigned";
+        }
+        return getPropertyValue(lead, p) || "";
+      })
+    );
+    const csv = [headers, ...rows]
+      .map((row) => row.map((value) => `"${String(value).replaceAll('"', '""')}"`).join(","))
+      .join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "my_leads.csv";
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
   const totalPages = Math.ceil(sortedLeads.length / leadPageSize);
   const visibleLeads = sortedLeads.slice((leadPage - 1) * leadPageSize, leadPage * leadPageSize);
   const selectedLeadIdSet = new Set(selectedLeadIds.map(Number));
@@ -356,11 +378,16 @@ export function MyLeadsPage() {
           </span>
         </div>
 
-        {hasAddPermission && (
-          <button className="icon-button" onClick={() => { setLeadForm({ company_name: "", property_values: [] }); setShowAddModal(true); }}>
-            <Plus size={16} /> Add Lead
+        <div className="row-actions">
+          <button type="button" className="secondary icon-button" onClick={exportLeads}>
+            <Download size={16} /> Export
           </button>
-        )}
+          {hasAddPermission && (
+            <button className="icon-button" onClick={() => { setLeadForm({ company_name: "", property_values: [] }); setShowAddModal(true); }}>
+              <Plus size={16} /> Add Lead
+            </button>
+          )}
+        </div>
 
         <div className="toolbar-menu-wrap">
           {columnWidthEdit ? (

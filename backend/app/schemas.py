@@ -181,6 +181,12 @@ class CompanyUpdate(CompanyBase):
     assigned_to: int | None = None
 
 
+class CompanyImportUpsert(CompanyBase):
+    property_values: list[CompanyPropertyValueCreate] = []
+    edit_only: bool = False
+
+
+
 class CompanyOut(CompanyBase):
     model_config = ConfigDict(from_attributes=True)
     id: int

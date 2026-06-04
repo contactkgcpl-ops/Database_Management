@@ -3,7 +3,7 @@ from sqlalchemy import or_, text, inspect
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Company, CompanyPropertyValue, Property, User, LeadManage
-from app.schemas import CompanyCreate, CompanyOut, CompanyUpdate
+from app.schemas import CompanyCreate, CompanyOut, CompanyUpdate, CompanyImportUpsert
 from app.db import engine
 
 class CompanyValidationError(ValueError):
@@ -401,3 +401,114 @@ def update_property_inline(db: Session, company_id: int, payload: InlineProperty
 
 def get_lead_history(db: Session, company_id: int) -> list[LeadHistory]:
     return db.query(LeadHistory).options(joinedload(LeadHistory.user)).filter(LeadHistory.company_id == company_id).order_by(LeadHistory.created_at.desc()).all()
+
+
+def validate_unique_properties_partial(db: Session, company_id: int, payload: CompanyImportUpsert) -> None:
+    unique_props = db.query(Property).filter(Property.is_unique == True, Property.is_active == True).all()
+    for prop in unique_props:
+        target_obj = next((pv for pv in payload.property_values if pv.property_id == prop.id), None)
+        if not target_obj or not target_obj.value:
+            continue
+        
+        target_val = target_obj.value.strip()
+        if not target_val:
+            continue
+        
+        if not prop.is_multi_value:
+            query = db.query(Company.id).filter(text(f"{prop.field_key} = :val"), Company.id != company_id).params(val=target_val)
+            if db.query(query.exists()).scalar():
+                raise CompanyValidationError(f"{prop.name} '{target_val}' already exists")
+        else:
+            vals = [v.strip() for v in target_val.split(",") if v.strip()]
+            for v in vals:
+                query = db.query(CompanyPropertyValue.id).filter(
+                    CompanyPropertyValue.property_id == prop.id,
+                    CompanyPropertyValue.value == v,
+                    CompanyPropertyValue.company_id != company_id
+                )
+                if db.query(query.exists()).scalar():
+                    raise CompanyValidationError(f"{prop.name} '{v}' already exists in another company")
+
+
+def normalize_company_name(name: str) -> str:
+    if not name:
+        return ""
+    import re
+    name_str = str(name).lower()
+    name_str = re.sub(r'[^a-z0-9]', '_', name_str)
+    name_str = re.sub(r'_+', '_', name_str)
+    return name_str.strip('_')
+
+
+def import_upsert_company(db: Session, payload: CompanyImportUpsert, user: User) -> Company:
+    all_companies = db.query(Company).all()
+    normalized_input = normalize_company_name(payload.company_name)
+    company = next((c for c in all_companies if normalize_company_name(c.company_name) == normalized_input), None)
+    
+    if not company:
+        if payload.edit_only:
+            raise CompanyValidationError("Company not found in database")
+        else:
+            create_payload = CompanyCreate(
+                company_name=payload.company_name,
+                property_values=payload.property_values
+            )
+            return create_company(db, create_payload, user)
+            
+    validate_unique_properties_partial(db, company.id, payload)
+    
+    for pv in payload.property_values:
+        prop = db.query(Property).get(pv.property_id)
+        if not prop:
+            continue
+            
+        new_val = pv.value.strip()
+        old_value = ""
+        
+        if prop.entity_type == "lead":
+            assignment = db.query(LeadManage).filter(LeadManage.company_id == company.id).first()
+            if not assignment:
+                assignment = LeadManage(company_id=company.id, assigned_to_id=user.id, assigned_by_id=user.id)
+                db.add(assignment)
+                db.commit()
+                db.refresh(assignment)
+            
+            raw_row = db.execute(text("SELECT * FROM lead_manage WHERE id = :id"), {"id": assignment.id}).mappings().first()
+            old_value = str(raw_row.get(prop.field_key)) if raw_row and raw_row.get(prop.field_key) is not None else ""
+            
+            if old_value != new_val:
+                db.execute(text(f"UPDATE lead_manage SET {prop.field_key} = :val WHERE company_id = :cid"), {"val": new_val, "cid": company.id})
+                
+        elif prop.is_multi_value:
+            old_vals = [cpv.value for cpv in company.property_values if cpv.property_id == prop.id]
+            old_value = ",".join(old_vals)
+            
+            if old_value != new_val:
+                db.execute(text("DELETE FROM company_property_values WHERE company_id = :cid AND property_id = :pid"), {"cid": company.id, "pid": prop.id})
+                for sub_val in new_val.split(","):
+                    s = sub_val.strip()
+                    if s:
+                        db.add(CompanyPropertyValue(company_id=company.id, property_id=prop.id, value=s))
+                        
+        else:
+            raw_row = db.execute(text("SELECT * FROM companies WHERE id = :id"), {"id": company.id}).mappings().first()
+            old_value = str(raw_row.get(prop.field_key)) if raw_row and raw_row.get(prop.field_key) is not None else ""
+            
+            if old_value != new_val:
+                db.execute(text(f"UPDATE companies SET {prop.field_key} = :val WHERE id = :cid"), {"val": new_val, "cid": company.id})
+                
+        if str(old_value) != str(new_val):
+            history = LeadHistory(
+                company_id=company.id,
+                property_key=prop.field_key,
+                property_name=prop.name,
+                old_value=str(old_value) if old_value else "",
+                new_value=str(new_val),
+                user_id=user.id
+            )
+            db.add(history)
+            
+    db.commit()
+    db.refresh(company)
+    return get_company(db, company.id)
+

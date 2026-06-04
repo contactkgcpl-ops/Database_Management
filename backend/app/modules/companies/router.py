@@ -14,8 +14,9 @@ from app.modules.companies.services import (
     to_company_out,
     update_company,
     assign_company,
+    import_upsert_company,
 )
-from app.schemas import CompanyCreate, CompanyOut, CompanyUpdate
+from app.schemas import CompanyCreate, CompanyOut, CompanyUpdate, CompanyImportUpsert
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
@@ -205,4 +206,18 @@ def bulk_delete_companies(
             delete_company(db, company)
             deleted_count += 1
     return {"ok": True, "deleted_count": deleted_count}
+
+
+@router.post("/import-upsert", response_model=CompanyOut)
+def import_upsert_company_endpoint(
+    payload: CompanyImportUpsert,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_permission("companies.manage")),
+):
+    try:
+        company = import_upsert_company(db, payload, user)
+        return to_company_out(db, company)
+    except CompanyValidationError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
 

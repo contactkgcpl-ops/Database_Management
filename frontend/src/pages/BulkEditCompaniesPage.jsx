@@ -14,6 +14,15 @@ const sanitizeValue = (val) => {
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const contactNumberRegex = /^\+?[0-9\s\-()]{7,18}$/;
 
+const normalizeCompanyName = (name) => {
+    if (!name) return "";
+    return String(name)
+        .toLowerCase()
+        .replace(/[^a-z0-9]/g, "_")
+        .replace(/_+/g, "_")
+        .replace(/(^_|_$)/g, "");
+};
+
 const parseCSV = (text) => {
     const lines = text.split(/\r?\n/).filter(line => line.trim());
     if (lines.length === 0) return { headers: [], rows: [] };
@@ -70,40 +79,115 @@ export function BulkEditCompaniesPage({ onBack }) {
     const [importProgress, setImportProgress] = useState(null); 
     const [rowErrors, setRowErrors] = useState({}); 
     const [invalidRowIds, setInvalidRowIds] = useState([]);
+    const [viewTab, setViewTab] = useState("all"); // "all", "updates", "exact"
+
+    const checkIsExactMatch = (row) => {
+        try {
+            const matchedCompany = findMatchedCompany(row);
+            if (!matchedCompany) return false;
+            
+            for (const [headerId, fieldKey] of Object.entries(mapping)) {
+                if (!fieldKey || fieldKey === "id") continue;
+                const csvVal = String(row[headerId] || "").trim();
+                if (fieldKey === "company_name") {
+                    const dbVal = String(matchedCompany.company_name || "").trim();
+                    if (normalizeCompanyName(csvVal) !== normalizeCompanyName(dbVal)) return false;
+                } else {
+                    const prop = activeProperties.find(p => p.field_key === fieldKey);
+                    if (!prop) continue;
+                    const pv = matchedCompany.property_values?.find(v => v.field_key === fieldKey || v.property_id === prop.id);
+                    const dbVal = pv ? String(pv.value || "").trim() : "";
+                    if (csvVal.toLowerCase() !== dbVal.toLowerCase()) return false;
+                }
+            }
+            return true;
+        } catch (err) {
+            console.error("Error in checkIsExactMatch:", err);
+            return false;
+        }
+    };
+
+    const filteredPreviewRows = (() => {
+        if (viewTab === "updates") {
+            return csvData.rows.filter(row => !checkIsExactMatch(row));
+        } else if (viewTab === "exact") {
+            return csvData.rows.filter(row => checkIsExactMatch(row));
+        }
+        return csvData.rows;
+    })();
+
+    const getRowDifferences = (row) => {
+        try {
+            const matchedCompany = findMatchedCompany(row);
+            if (!matchedCompany) return "New Company";
+            
+            const diffs = [];
+            for (const [headerId, fieldKey] of Object.entries(mapping)) {
+                if (!fieldKey || fieldKey === "id") continue;
+                
+                const csvVal = String(row[headerId] || "").trim();
+                const header = csvData.headers.find(h => h.id === headerId);
+                const columnName = header ? header.label : fieldKey;
+
+                if (fieldKey === "company_name") {
+                    const dbVal = String(matchedCompany.company_name || "").trim();
+                    if (normalizeCompanyName(csvVal) !== normalizeCompanyName(dbVal)) {
+                        diffs.push(`${columnName}: "${dbVal || "[blank]"}" → "${csvVal || "[blank]"}"`);
+                    }
+                } else {
+                    const prop = activeProperties.find(p => p.field_key === fieldKey);
+                    if (!prop) continue;
+                    const pv = matchedCompany.property_values?.find(v => v.field_key === fieldKey || v.property_id === prop.id);
+                    const dbVal = pv ? String(pv.value || "").trim() : "";
+                    if (csvVal.toLowerCase() !== dbVal.toLowerCase()) {
+                        diffs.push(`${columnName}: "${dbVal || "[blank]"}" → "${csvVal || "[blank]"}"`);
+                    }
+                }
+            }
+            return diffs.length > 0 ? diffs.join(", ") : "No changes (Exact Match)";
+        } catch (err) {
+            console.error("Error in getRowDifferences:", err);
+            return "Error calculating differences";
+        }
+    };
 
     const findMatchedCompany = (row) => {
-        const payload = buildCompanyPayload(row, mapping, activeProperties);
+        try {
+            const payload = buildCompanyPayload(row, mapping, activeProperties);
 
-        // 1. Match by ID
-        if (payload.id) {
-            const match = companies.data.find(c => Number(c.id) === Number(payload.id));
-            if (match) return match;
-        }
-
-        // 2. Match by Company Name
-        if (payload.company_name) {
-            const match = companies.data.find(c => c.company_name?.toLowerCase() === payload.company_name.toLowerCase());
-            if (match) return match;
-        }
-
-        // 3. Match by any unique property
-        for (const [headerId, fieldKey] of Object.entries(mapping)) {
-            if (!fieldKey || fieldKey === "company_name" || fieldKey === "id") continue;
-            const val = String(row[headerId] || "").trim();
-            if (!val) continue;
-
-            const prop = activeProperties.find(p => p.field_key === fieldKey);
-            const isUnique = prop?.is_unique || ["email_id", "contact_number"].includes(fieldKey);
-            if (isUnique) {
-                const match = companies.data.find(c => {
-                    return c.property_values?.some(pv => {
-                        if (pv.field_key !== fieldKey && pv.property_id !== prop?.id) return false;
-                        const vals = (pv.value || "").split(",").map(v => v.trim().toLowerCase());
-                        return vals.includes(val.toLowerCase());
-                    });
-                });
+            // 1. Match by ID
+            if (payload.id) {
+                const match = companies.data.find(c => Number(c.id) === Number(payload.id));
                 if (match) return match;
             }
+
+            // 2. Match by Company Name
+            if (payload.company_name) {
+                const match = companies.data.find(c => normalizeCompanyName(c.company_name) === normalizeCompanyName(payload.company_name));
+                if (match) return match;
+            }
+
+            // 3. Match by any unique property
+            for (const [headerId, fieldKey] of Object.entries(mapping)) {
+                if (!fieldKey || fieldKey === "company_name" || fieldKey === "id") continue;
+                const val = String(row[headerId] || "").trim();
+                if (!val) continue;
+
+                const prop = activeProperties.find(p => p.field_key === fieldKey);
+                const isUnique = prop?.is_unique || ["email_id", "contact_number"].includes(fieldKey);
+                if (isUnique) {
+                    const match = companies.data.find(c => {
+                        return c.property_values?.some(pv => {
+                            if (pv.field_key !== fieldKey && pv.property_id !== prop?.id) return false;
+                            const vals = (pv.value || "").split(",").map(v => v.trim().toLowerCase());
+                            return vals.includes(val.toLowerCase());
+                        });
+                    });
+                    if (match) return match;
+                }
+            }
+        } catch (err) {
+            console.error("Error in findMatchedCompany:", err);
         }
         return null;
     };
@@ -149,15 +233,11 @@ export function BulkEditCompaniesPage({ onBack }) {
 
     const validateRow = (row, rowIndex) => {
         const payload = buildCompanyPayload(row, mapping, activeProperties);
+        const matchedCompany = findMatchedCompany(row);
         const issues = [];
 
         if (!payload.company_name?.trim()) {
             issues.push("Company Name is required");
-        }
-
-        const matchedCompany = findMatchedCompany(row);
-        if (!matchedCompany) {
-            issues.push("Company not found in database");
         }
 
         // Check format validations
@@ -232,9 +312,10 @@ export function BulkEditCompaniesPage({ onBack }) {
     };
 
     const handleImport = async () => {
-        const validRows = csvData.rows.filter((r, i) => validateRow(r, i).issues.length === 0);
+        const rowsToProcess = csvData.rows.filter(r => !checkIsExactMatch(r));
+        const validRows = rowsToProcess.filter((r, i) => validateRow(r, i).issues.length === 0);
         if (validRows.length === 0) {
-            notify("No valid rows to edit", "error");
+            notify("No valid rows to edit or create (all matches may be exact)", "info");
             return;
         }
 
@@ -248,7 +329,7 @@ export function BulkEditCompaniesPage({ onBack }) {
             const row = validRows[i];
             const payload = {
                 ...buildCompanyPayload(row, mapping, activeProperties),
-                edit_only: true
+                edit_only: false
             };
 
             try {
@@ -276,14 +357,15 @@ export function BulkEditCompaniesPage({ onBack }) {
         setRowErrors(newRowErrors);
         setImporting(false);
 
-        if (succeededRowIds.length === validRows.length && remainingRows.length === 0) {
-            notify(`All ${succeededRowIds.length} companies edited successfully!`, "success");
+        const failedRowsCount = remainingRows.filter(r => !checkIsExactMatch(r)).length;
+        if (failedRowsCount === 0) {
+            notify(`Bulk edit finished! ${succeededRowIds.length} processed successfully. Exact matches skipped.`, "success");
             onBack();
         } else {
-            const invalidIds = remainingRows.map(r => r.row_id);
+            const invalidIds = remainingRows.filter(r => !checkIsExactMatch(r)).map(r => r.row_id);
             setInvalidRowIds(invalidIds);
             setStep(3);
-            notify(`Bulk edit finished: ${succeededRowIds.length} succeeded. ${remainingRows.length} invalid/failed rows moved to Step 4.`, "warning");
+            notify(`Bulk edit finished: ${succeededRowIds.length} succeeded. ${invalidIds.length} failed rows moved to Step 4.`, "warning");
         }
     };
 
@@ -320,7 +402,7 @@ export function BulkEditCompaniesPage({ onBack }) {
             const row = fixedRows[i];
             const payload = {
                 ...buildCompanyPayload(row, mapping, activeProperties),
-                edit_only: true
+                edit_only: false
             };
 
             try {
@@ -442,8 +524,60 @@ export function BulkEditCompaniesPage({ onBack }) {
                         <div className="crm-section-head compact">
                             <div>
                                 <h2>Data Preview & Validation (Bulk Edit)</h2>
-                                <p>Double-click any cell to edit. Red indicators show rows that do not match any existing database records, contain duplicate unique fields, or have formatting issues.</p>
+                                <p>Double-click any cell to edit. Indicators show status: exact match (no changes), update, or new company.</p>
                             </div>
+                        </div>
+
+                        {/* View Tabs */}
+                        <div style={{ display: "flex", gap: "12px", margin: "8px 0 16px" }}>
+                            <button
+                                type="button"
+                                style={{
+                                    padding: "8px 16px",
+                                    borderRadius: "6px",
+                                    border: "1px solid #cbd5e1",
+                                    backgroundColor: viewTab === "all" ? "#2563eb" : "#f8fafc",
+                                    color: viewTab === "all" ? "#fff" : "#475569",
+                                    cursor: "pointer",
+                                    fontWeight: "600",
+                                    fontSize: "13px"
+                                }}
+                                onClick={() => setViewTab("all")}
+                            >
+                                All Rows ({csvData.rows.length})
+                            </button>
+                            <button
+                                type="button"
+                                style={{
+                                    padding: "8px 16px",
+                                    borderRadius: "6px",
+                                    border: "1px solid #cbd5e1",
+                                    backgroundColor: viewTab === "updates" ? "#2563eb" : "#f8fafc",
+                                    color: viewTab === "updates" ? "#fff" : "#475569",
+                                    cursor: "pointer",
+                                    fontWeight: "600",
+                                    fontSize: "13px"
+                                }}
+                                onClick={() => setViewTab("updates")}
+                            >
+                                Pending Updates / New ({csvData.rows.filter(r => !checkIsExactMatch(r)).length})
+                            </button>
+                            <button
+                                type="button"
+                                style={{
+                                    padding: "8px 16px",
+                                    borderRadius: "6px",
+                                    border: "1px solid #cbd5e1",
+                                    backgroundColor: viewTab === "exact" ? "#2563eb" : "#f8fafc",
+                                    color: viewTab === "exact" ? "#fff" : "#475569",
+                                    cursor: "pointer",
+                                    fontWeight: "600",
+                                    fontSize: "13px"
+                                }}
+                                onClick={() => setViewTab("exact")}
+                            >
+                                Exact Matches ({csvData.rows.filter(r => checkIsExactMatch(r)).length})
+                            </button>
                         </div>
 
                         {importProgress && (
@@ -467,39 +601,44 @@ export function BulkEditCompaniesPage({ onBack }) {
                                     <tr>
                                         <th>Status</th>
                                         {csvData.headers.map(h => mapping[h.id] && <th key={h.id}>{h.label}</th>)}
+                                        <th style={{ minWidth: "200px" }}>Changes / Differences</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {csvData.rows.slice(0, 50).map((row, i) => {
-                                        const { issues } = validateRow(row, i);
+                                    {filteredPreviewRows.slice(0, 50).map((row) => {
+                                        const actualIdx = csvData.rows.findIndex(r => r.row_id === row.row_id);
+                                        const { issues } = validateRow(row, actualIdx);
                                         const isValid = issues.length === 0;
                                         const matchedCompany = findMatchedCompany(row);
+                                        const isExact = checkIsExactMatch(row);
 
                                         return (
-                                            <tr key={row.row_id || i} className={!isValid ? "has-issues" : ""}>
+                                            <tr key={row.row_id} className={!isValid ? "has-issues" : ""}>
                                                 <td className="status-cell">
                                                      <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: "4px" }}>
-                                                         {isValid ? (
-                                                             <CheckCircle2 size={16} className="success" />
-                                                         ) : (
-                                                             <div className="tooltip-wrap">
-                                                                 <AlertCircle size={16} className="danger" />
-                                                                 <div className="tooltip">{issues.join(", ")}</div>
-                                                             </div>
-                                                         )}
-                                                         {matchedCompany ? (
-                                                             <span className="badge-update" style={{ fontSize: "10px", padding: "2px 4px", borderRadius: "4px", backgroundColor: "#e0f2fe", color: "#0369a1", fontWeight: "bold" }}>Update</span>
-                                                         ) : (
-                                                             <span className="badge-error" style={{ fontSize: "10px", padding: "2px 4px", borderRadius: "4px", backgroundColor: "#fee2e2", color: "#b91c1c", fontWeight: "bold" }}>Not Found</span>
-                                                         )}
+                                                          {isValid ? (
+                                                               <CheckCircle2 size={16} className="success" />
+                                                          ) : (
+                                                               <div className="tooltip-wrap">
+                                                                   <AlertCircle size={16} className="danger" />
+                                                                   <div className="tooltip">{issues.join(", ")}</div>
+                                                               </div>
+                                                          )}
+                                                          {isExact ? (
+                                                               <span className="badge-exact" style={{ fontSize: "10px", padding: "2px 4px", borderRadius: "4px", backgroundColor: "#f1f5f9", color: "#475569", fontWeight: "bold", whiteSpace: "nowrap" }}>Exact Match</span>
+                                                          ) : matchedCompany ? (
+                                                               <span className="badge-update" style={{ fontSize: "10px", padding: "2px 4px", borderRadius: "4px", backgroundColor: "#e0f2fe", color: "#0369a1", fontWeight: "bold" }}>Update</span>
+                                                          ) : (
+                                                               <span className="badge-new" style={{ fontSize: "10px", padding: "2px 4px", borderRadius: "4px", backgroundColor: "#dcfce7", color: "#15803d", fontWeight: "bold", whiteSpace: "nowrap" }}>New Company</span>
+                                                          )}
                                                      </div>
                                                 </td>
                                                 {csvData.headers.map(h => {
                                                     const fieldKey = mapping[h.id];
                                                     if (!fieldKey) return null;
 
-                                                    const isEditing = editingCell?.rowIndex === i && editingCell?.headerId === h.id;
+                                                    const isEditing = editingCell?.rowIndex === actualIdx && editingCell?.headerId === h.id;
                                                     const val = row[h.id];
 
                                                     const prop = activeProperties.find(p => p.field_key === fieldKey);
@@ -530,21 +669,21 @@ export function BulkEditCompaniesPage({ onBack }) {
                                                         <td
                                                             key={h.id}
                                                             className={`${isDuplicate ? "cell-duplicate" : ""} ${isEditing ? "cell-editing" : ""}`}
-                                                            onDoubleClick={() => setEditingCell({ rowIndex: i, headerId: h.id })}
+                                                            onDoubleClick={() => setEditingCell({ rowIndex: actualIdx, headerId: h.id })}
                                                         >
                                                             {isEditing ? (
                                                                 <input
                                                                     autoFocus
                                                                     className="cell-input"
                                                                     value={val}
-                                                                    onChange={(e) => updateCell(i, h.id, e.target.value)}
+                                                                    onChange={(e) => updateCell(actualIdx, h.id, e.target.value)}
                                                                     onBlur={(e) => {
-                                                                        updateCell(i, h.id, sanitizeValue(e.target.value));
+                                                                        updateCell(actualIdx, h.id, sanitizeValue(e.target.value));
                                                                         setEditingCell(null);
                                                                     }}
                                                                     onKeyDown={(e) => {
                                                                         if (e.key === "Enter") {
-                                                                            updateCell(i, h.id, sanitizeValue(e.target.value));
+                                                                            updateCell(actualIdx, h.id, sanitizeValue(e.target.value));
                                                                             setEditingCell(null);
                                                                         }
                                                                     }}
@@ -555,6 +694,9 @@ export function BulkEditCompaniesPage({ onBack }) {
                                                         </td>
                                                     );
                                                 })}
+                                                <td style={{ fontSize: "12px", color: "#475569", padding: "8px 12px", maxWidth: "250px", whiteSpace: "normal" }}>
+                                                    {getRowDifferences(row)}
+                                                </td>
                                                 <td className="action-cell">
                                                     <button 
                                                         type="button" 
@@ -570,7 +712,14 @@ export function BulkEditCompaniesPage({ onBack }) {
                                     })}
                                 </tbody>
                             </table>
-                            {csvData.rows.length > 50 && <p className="muted" style={{ padding: "10px" }}>Showing first 50 rows of {csvData.rows.length} total.</p>}
+                            {filteredPreviewRows.length === 0 && (
+                                <div className="muted" style={{ padding: "40px", textAlign: "center", background: "#fff", borderTop: "1px solid #e2e8f0" }}>
+                                    {viewTab === "exact" ? "No exact matches found (all rows contain updates or new companies)." :
+                                     viewTab === "updates" ? "No pending updates or new companies found." :
+                                     "No data rows available."}
+                                </div>
+                            )}
+                            {filteredPreviewRows.length > 50 && <p className="muted" style={{ padding: "10px" }}>Showing first 50 rows of {filteredPreviewRows.length} total.</p>}
                         </div>
                         <div className="modal-actions">
                             <button className="secondary icon-button" onClick={() => setStep(1)}>Back to Mapping</button>
@@ -630,6 +779,7 @@ export function BulkEditCompaniesPage({ onBack }) {
                                         <th>Status</th>
                                         <th style={{ minWidth: "220px" }}>Validation Summary</th>
                                         {csvData.headers.map(h => mapping[h.id] && <th key={h.id}>{h.label}</th>)}
+                                        <th style={{ minWidth: "200px" }}>Changes / Differences</th>
                                         <th>Actions</th>
                                     </tr>
                                 </thead>
@@ -649,10 +799,12 @@ export function BulkEditCompaniesPage({ onBack }) {
                                                          ) : (
                                                              <AlertCircle size={16} className="danger" />
                                                          )}
-                                                         {matchedCompany ? (
+                                                         {checkIsExactMatch(row) ? (
+                                                              <span className="badge-exact" style={{ fontSize: "10px", padding: "2px 4px", borderRadius: "4px", backgroundColor: "#f1f5f9", color: "#475569", fontWeight: "bold", whiteSpace: "nowrap" }}>Exact Match</span>
+                                                         ) : matchedCompany ? (
                                                              <span className="badge-update" style={{ fontSize: "10px", padding: "2px 4px", borderRadius: "4px", backgroundColor: "#e0f2fe", color: "#0369a1", fontWeight: "bold" }}>Update</span>
                                                          ) : (
-                                                             <span className="badge-error" style={{ fontSize: "10px", padding: "2px 4px", borderRadius: "4px", backgroundColor: "#fee2e2", color: "#b91c1c", fontWeight: "bold" }}>Not Found</span>
+                                                             <span className="badge-new" style={{ fontSize: "10px", padding: "2px 4px", borderRadius: "4px", backgroundColor: "#dcfce7", color: "#15803d", fontWeight: "bold", whiteSpace: "nowrap" }}>New Company</span>
                                                          )}
                                                      </div>
                                                 </td>
@@ -729,6 +881,9 @@ export function BulkEditCompaniesPage({ onBack }) {
                                                         </td>
                                                     );
                                                 })}
+                                                <td style={{ fontSize: "12px", color: "#475569", padding: "8px 12px", maxWidth: "250px", whiteSpace: "normal" }}>
+                                                    {getRowDifferences(row)}
+                                                </td>
                                                 <td className="action-cell">
                                                     <button 
                                                         type="button" 

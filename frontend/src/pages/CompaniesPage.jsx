@@ -218,6 +218,7 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
                 </button>
                 <button type="button" className="icon-button compact-primary" onClick={() => setPage("add-company")}><Plus size={16} /> Add Company</button>
                 <button type="button" className="secondary icon-button" onClick={() => setPage("import-companies")}><FileUp size={16} /> Import</button>
+                <button type="button" className="secondary icon-button" onClick={() => setPage("bulk-edit-companies")}><FileUp size={16} /> Edit Bulk Company</button>
                 <button type="button" className="secondary icon-only menu-trigger" onClick={() => setActionsMenuOpen(!actionsMenuOpen)}><MoreVertical size={18} /></button>
                 {actionsMenuOpen && (
                   <div className="action-menu">

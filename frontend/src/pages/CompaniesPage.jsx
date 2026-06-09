@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Columns3, FileUp, GripVertical, MoreVertical, Pencil, Plus, Ruler, Save, Search, Trash2, X, SquareCheckBig } from "lucide-react";
+import { Columns3, FileUp, GripVertical, MoreVertical, Pencil, Plus, Ruler, Save, Search, Trash2, X, SquareCheckBig, History } from "lucide-react";
 import { GridFilterDropdown } from "../components/GridFilterDropdown";
 import { api } from "../api";
 import { useNotify } from "../components/NotificationProvider";
@@ -26,9 +26,64 @@ function getCompanyPropertyValue(company, property) {
   return pv ? pv.value : "";
 }
 
+function propertyOptions(property) {
+  return (property?.options || [])
+    .filter((option) => option.is_active !== false)
+    .map((option) => ({ label: option.label, value: option.value }));
+}
+
+function splitMultiValue(value) {
+  return String(value || "")
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function formatPropertyValue(property, value) {
+  const labelsByValue = new Map(propertyOptions(property).map((option) => [String(option.value), option.label]));
+  const parts = splitMultiValue(value);
+  if (!parts.length) return "";
+  return parts.map((part) => labelsByValue.get(String(part)) || part).join(", ");
+}
+
+const getVerificationStatusStyle = (value) => {
+  if (value === "verified") return { backgroundColor: "#d1fae5", color: "#065f46", fontWeight: "700", border: "1px solid #a7f3d0" };
+  if (value === "pending") return { backgroundColor: "#fef3c7", color: "#92400e", fontWeight: "700", border: "1px solid #fde68a" };
+  if (value === "unverified") return { backgroundColor: "#fee2e2", color: "#991b1b", fontWeight: "700", border: "1px solid #fecaca" };
+  return {};
+};
+
 export function CompaniesPage({ setPage, editingId, setEditingId }) {
   const notify = useNotify();
   const { user } = useAuth();
+  const handleInlineEdit = async (companyId, prop, value) => {
+    try {
+      await api.updateCompanyInline(companyId, { property_id: prop.id, value });
+      notify("Updated successfully", "success");
+      companies.reload();
+    } catch (err) { }
+  };
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyData, setHistoryData] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyFilterKey, setHistoryFilterKey] = useState(null);
+
+  const openHistory = async (companyId, filterKey = null) => {
+    setHistoryFilterKey(filterKey);
+    setHistoryModalOpen(true);
+    setHistoryLoading(true);
+    try {
+      const data = await api.getCompanyHistory(companyId);
+      setHistoryData(data);
+    } catch (err) { }
+    setHistoryLoading(false);
+  };
+
+  const visibleHistory = historyData.filter((item) => {
+    if (!historyFilterKey) return true;
+    if (Array.isArray(historyFilterKey)) return historyFilterKey.includes(item.property_key);
+    return item.property_key === historyFilterKey;
+  });
   const canManage = user.permissions.includes("companies.manage");
   const [q, setQ] = useState("");
   const [columnChooserOpen, setColumnChooserOpen] = useState(false);
@@ -271,8 +326,12 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
                       const dataValues = companies.data.map(c => getCompanyPropertyValue(c, p))
                         .flatMap(v => String(v).split(",").map(s => s.trim()))
                         .filter(Boolean);
-                      const propOptions = p.options?.map(o => o.value) || [];
-                      const uniqueValues = Array.from(new Set([...propOptions, ...dataValues])).sort();
+                      const optionMap = new Map(propertyOptions(p).map((option) => [String(option.value), option.label]));
+                      const rawOptions = dataValues.filter((item) => !optionMap.has(String(item)));
+                      const uniqueValues = [
+                        ...propertyOptions(p),
+                        ...Array.from(new Set(rawOptions)).sort().map((item) => ({ value: item, label: formatPropertyValue(p, item) || item }))
+                      ];
 
                       return (
                         <th key={`${p.field_key}-f`}>
@@ -325,9 +384,38 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
                         )}
                         {gridProperties.map((p) => (
                           <td key={p.field_key}>
-                            <span className="cell-text" title={getCompanyPropertyValue(c, p)}>
-                              {p.field_key === "company_name" ? <strong>{getCompanyPropertyValue(c, p)}</strong> : getCompanyPropertyValue(c, p)}
-                            </span>
+                            {p.object_type === "dropdown" ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <select
+                                  className="inline-select"
+                                  style={{
+                                    flex: 1,
+                                    padding: "4px",
+                                    border: "1px solid #e2e8f0",
+                                    borderRadius: "4px",
+                                    fontSize: "12px",
+                                    ...getVerificationStatusStyle(getCompanyPropertyValue(c, p))
+                                  }}
+                                  value={getCompanyPropertyValue(c, p) || ""}
+                                  onChange={(e) => handleInlineEdit(c.id, p, e.target.value)}
+                                  disabled={!canManage}
+                                >
+                                  <option value="">-</option>
+                                  {p.options?.map(o => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                  ))}
+                                </select>
+                                {c.history_keys?.includes(p.field_key) && (
+                                  <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, p.field_key)} title={`View ${p.name} History`} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
+                                    <History size={14} style={{ color: "#64748b" }} />
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="cell-text" title={getCompanyPropertyValue(c, p)}>
+                                {p.field_key === "company_name" ? <strong>{getCompanyPropertyValue(c, p)}</strong> : (p.options?.length ? formatPropertyValue(p, getCompanyPropertyValue(c, p)) : getCompanyPropertyValue(c, p))}
+                              </span>
+                            )}
                           </td>
                         ))}
                         {canManage && (
@@ -545,6 +633,44 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
               <button onClick={saveColumnChooser} style={{ backgroundColor: "#176b5b", color: "#fff", fontSize: "12px", fontWeight: "700", padding: "8px 24px", borderRadius: "3px" }}>Apply</button>
               <button className="secondary" onClick={() => setColumnChooserOpen(false)} style={{ background: "#fff", border: "1px solid #cbd5e1", color: "#1e293b", fontSize: "12px", fontWeight: "700", padding: "8px 24px", borderRadius: "3px" }}>Cancel</button>
               <button type="button" style={{ background: "none", color: "#176b5b", fontSize: "12px", fontWeight: "600", marginLeft: "auto", cursor: "pointer" }} onClick={() => setDraftColumns([])}>Remove All Columns</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {historyModalOpen && (
+        <div className="modal-backdrop" style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "grid", placeItems: "center", zIndex: 1000 }}>
+          <div className="modal" style={{ maxWidth: "600px", width: "95%", backgroundColor: "#fff", borderRadius: "4px", overflow: "hidden" }}>
+            <div className="modal-head" style={{ backgroundColor: "#176b5b", color: "#fff", padding: "10px 20px", display: "flex", justifyContent: "space-between" }}>
+              <h2 style={{ fontSize: "14px", margin: 0 }}>Company/Lead History</h2>
+              <button onClick={() => setHistoryModalOpen(false)} style={{ background: "transparent", color: "#fff", border: "none", cursor: "pointer" }}><X size={18} /></button>
+            </div>
+            <div className="modal-body" style={{ padding: "20px", maxHeight: "60vh", overflowY: "auto" }}>
+              {historyLoading ? (
+                <div style={{ textAlign: "center", padding: "20px", color: "#64748b" }}>Loading history...</div>
+              ) : historyData.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "20px", color: "#64748b" }}>No history found.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {visibleHistory.length === 0 ? (
+                    <div style={{ textAlign: "center", padding: "20px", color: "#64748b" }}>No history found for this field.</div>
+                  ) : visibleHistory.map(h => (
+                    <div key={h.id} style={{ padding: "10px", border: "1px solid #e2e8f0", borderRadius: "6px", background: "#f8fafc" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "11px", color: "#64748b", fontWeight: "600" }}>
+                        <span>{new Date(h.created_at).toLocaleString()}</span>
+                        <span>{h.user_name || "System"}</span>
+                      </div>
+                      <div style={{ fontSize: "13px", color: "#334155" }}>
+                        Changed <strong>{h.property_name}</strong> from <span style={{ textDecoration: "line-through", color: "#94a3b8" }}>{h.old_value || "(empty)"}</span> to <span style={{ color: "#176b5b", fontWeight: "600" }}>{h.new_value || "(empty)"}</span>
+                      </div>
+                      {h.remark && (
+                        <div style={{ marginTop: "6px", padding: "8px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "4px", fontSize: "12px", color: "#475569" }}>
+                          <strong>Remark:</strong> {h.remark}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

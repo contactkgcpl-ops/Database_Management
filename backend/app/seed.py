@@ -49,6 +49,7 @@ DEFAULT_PROPERTIES = [
     ("Type", "type", "multiselect", "custom", "", False, False, False, "company", "multiselect", True, 80, 0),
     ("Website", "website", "text", "custom", "Website", False, False, False, "company", "text", True, 50, 0),
     ("Description", "description", "textarea", "custom", "", False, False, False, "company", "text", True, 60, 0),
+    ("Verification Status", "verification_status", "dropdown", "custom", "Company verification status", False, False, False, "company", "dropdown", True, 15, 0),
     ("Cold Leads Status", "status", "dropdown", "custom", "", False, False, False, "lead", "dropdown", True, 2, 0),
     ("Connected Source", "connected_source", "multiselect", "custom", "Lead connected source", False, False, False, "lead", "multiselect", True, 3, 0),
     ("Inquiry No", "inquiry_no", "text", "custom", "Inquiry Number", False, False, False, "lead", "text", True, 10, 0),
@@ -65,6 +66,11 @@ DEFAULT_GRIDS = [
 ]
 
 DEFAULT_PROPERTY_OPTIONS = {
+    "verification_status": [
+        ("Pending", "pending", 0),
+        ("Verified", "verified", 10),
+        ("Unverified", "unverified", 20),
+    ],
     "status": [
         ("New", "new", 0),
         ("Connected", "connected", 10),
@@ -148,7 +154,10 @@ def seed_property_grids(db: Session, prop: Property) -> None:
     if not prop.show_on_grid:
         return
 
-    grid_keys = ["assign_leads", "my_leads", "inquiries"] if prop.entity_type == "lead" else ["companies", "inquiries"]
+    if prop.field_key == "verification_status":
+        grid_keys = ["companies", "my_leads", "assign_leads"]
+    else:
+        grid_keys = ["assign_leads", "my_leads", "inquiries"] if prop.entity_type == "lead" else ["companies", "inquiries"]
     grids = db.query(DisplayGrid).filter(DisplayGrid.key.in_(grid_keys), DisplayGrid.is_active.is_(True)).all()
     existing_grid_ids = {item.grid_id for item in prop.grids}
     for grid in grids:
@@ -251,4 +260,8 @@ def seed_defaults(db: Session) -> None:
         seed_property_options(db, prop)
         seed_property_grids(db, prop)
         ensure_dynamic_column(db, prop)
+    db.commit()
+
+    # Initialize verification_status to pending for existing companies
+    db.execute(text("UPDATE companies SET verification_status = 'pending' WHERE verification_status IS NULL OR verification_status = ''"))
     db.commit()

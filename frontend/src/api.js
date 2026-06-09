@@ -206,4 +206,6 @@ export const api = {
   createVendor: (data) => request("/vendors", { method: "POST", body: JSON.stringify(data) }),
   updateVendor: (id, data) => request(`/vendors/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   deleteVendor: (id) => request(`/vendors/${id}`, { method: "DELETE" }),
+  updateVendorInline: (vendorId, payload) => request(`/vendors/${vendorId}/inline-update`, { method: "PUT", body: JSON.stringify(payload) }),
+  getVendorHistory: (vendorId) => request(`/vendors/${vendorId}/history`),
 };

@@ -399,6 +399,8 @@ class Vendor(Base, TimestampMixin):
     creator: Mapped["User"] = relationship(foreign_keys=[created_by])
     contact_numbers: Mapped[list["VendorContactNumber"]] = relationship(cascade="all, delete-orphan", back_populates="vendor")
     products: Mapped[list["VendorProduct"]] = relationship(cascade="all, delete-orphan", back_populates="vendor")
+    history_entries: Mapped[list["VendorHistory"]] = relationship(cascade="all, delete-orphan", back_populates="vendor")
+    notes: Mapped[list["VendorNote"]] = relationship(cascade="all, delete-orphan", back_populates="vendor")
 
 
 class VendorContactNumber(Base, TimestampMixin):
@@ -419,4 +421,34 @@ class VendorProduct(Base, TimestampMixin):
     product: Mapped[str] = mapped_column(String(180), index=True)
 
     vendor: Mapped[Vendor] = relationship(back_populates="products")
+
+
+class VendorHistory(Base, TimestampMixin):
+    __tablename__ = "vendor_history"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    vendor_id: Mapped[int] = mapped_column(ForeignKey("vendors.id", ondelete="CASCADE"), index=True)
+    field_key: Mapped[str] = mapped_column(String(100), index=True)
+    field_name: Mapped[str] = mapped_column(String(160))
+    old_value: Mapped[str | None] = mapped_column(Text)
+    new_value: Mapped[str | None] = mapped_column(Text)
+    remark: Mapped[str | None] = mapped_column(Text)
+    user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+
+    vendor: Mapped[Vendor] = relationship(back_populates="history_entries")
+    user: Mapped[User | None] = relationship(foreign_keys=[user_id])
+
+
+class VendorNote(Base, TimestampMixin):
+    __tablename__ = "vendor_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    vendor_id: Mapped[int] = mapped_column(ForeignKey("vendors.id", ondelete="CASCADE"), index=True)
+    note: Mapped[str] = mapped_column(Text)
+
+    vendor: Mapped[Vendor] = relationship(back_populates="notes")
+
+
+
+
 

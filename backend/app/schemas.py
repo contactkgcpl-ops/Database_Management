@@ -435,11 +435,13 @@ class VendorBase(BaseModel):
 class VendorCreate(VendorBase):
     products: list[str] = []
     contact_numbers: list[str] = []
+    notes: list[str] = []
 
 
 class VendorUpdate(VendorBase):
     products: list[str] = []
     contact_numbers: list[str] = []
+    notes: list[str] = []
 
 
 class VendorOut(VendorBase):
@@ -450,5 +452,28 @@ class VendorOut(VendorBase):
     creator_name: str | None = None
     products: list[str] = []
     contact_numbers: list[str] = []
+    notes: list[str] = []
+    history_keys: list[str] = []
     model_config = ConfigDict(from_attributes=True)
+
+
+class InlineVendorUpdate(BaseModel):
+    field_key: str = Field(min_length=1)
+    value: str
+    remark: str | None = None
+
+
+class VendorHistoryOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    vendor_id: int
+    field_key: str
+    field_name: str
+    old_value: str | None = None
+    new_value: str | None = None
+    remark: str | None = None
+    user_id: int | None = None
+    user_name: str | None = None
+    created_at: datetime
+
 

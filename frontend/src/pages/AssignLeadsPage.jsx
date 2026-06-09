@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from "react";
-import { Search, X, MoreVertical, Ruler, Columns3, Save, History, SquareCheckBig } from "lucide-react";
+import { Search, X, MoreVertical, Ruler, Columns3, Save, History, SquareCheckBig, Pencil, Trash2 } from "lucide-react";
 import { api } from "../api";
 import { useLoad } from "../hooks/useLoad";
 import { useNotify } from "../components/NotificationProvider";
@@ -41,9 +41,33 @@ function uniqueSorted(values) {
   return Array.from(new Set(values.filter(Boolean))).sort((a, b) => String(a).localeCompare(String(b)));
 }
 
-export function AssignLeadsPage() {
+const getVerificationStatusStyle = (value) => {
+  if (value === "verified") return { backgroundColor: "#d1fae5", color: "#065f46", fontWeight: "700", border: "1px solid #a7f3d0" };
+  if (value === "pending") return { backgroundColor: "#fef3c7", color: "#92400e", fontWeight: "700", border: "1px solid #fde68a" };
+  if (value === "unverified") return { backgroundColor: "#fee2e2", color: "#991b1b", fontWeight: "700", border: "1px solid #fecaca" };
+  return {};
+};
+
+export function AssignLeadsPage({ setPage, setEditingId }) {
   const { user } = useAuth();
   const notify = useNotify();
+  const canManage = user?.permissions?.includes("companies.manage");
+
+  const edit = (company) => {
+    setEditingId(company.id);
+    setPage("add-company");
+  };
+
+  const remove = async (company) => {
+    if (!window.confirm(`Delete ${company.company_name}?`)) return;
+    try {
+      await api.deleteCompany(company.id);
+      notify("Company deleted", "success");
+      companies.reload();
+    } catch (err) {
+      notify("Failed to delete company", "error");
+    }
+  };
   const [q, setQ] = useState("");
   const companies = useLoad(() => api.companies(q), [q]);
   const users = useLoad(() => api.users(), []);
@@ -413,6 +437,7 @@ export function AssignLeadsPage() {
                         )}
                       </th>
                     ))}
+                    {canManage && <th style={{ width: "100px" }}>Actions</th>}
                   </tr>
                   <tr className="filter-row">
                     {bulkMode && <th className="bulk-select-col" />}
@@ -470,6 +495,7 @@ export function AssignLeadsPage() {
                         </th>
                       );
                     })}
+                    {canManage && <th />}
                   </tr>
                 </thead>
                 <tbody>
@@ -573,17 +599,31 @@ export function AssignLeadsPage() {
                               />
                             </div>
                           ) : p.object_type === "dropdown" ? (
-                            <select
-                              className="inline-select"
-                              style={{ width: "100%", padding: "4px", border: "1px solid #e2e8f0", borderRadius: "4px", background: "transparent", fontSize: "12px", color: "#334155" }}
-                              value={getVal(c, p) || ""}
-                              onChange={(e) => handleInlineEdit(c.id, p, e.target.value)}
-                            >
-                              <option value="">-</option>
-                              {p.options?.map(o => (
-                                <option key={o.value} value={o.value}>{o.label}</option>
-                              ))}
-                            </select>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                              <select
+                                className="inline-select"
+                                style={{
+                                  flex: 1,
+                                  padding: "4px",
+                                  border: "1px solid #e2e8f0",
+                                  borderRadius: "4px",
+                                  fontSize: "12px",
+                                  ...getVerificationStatusStyle(getVal(c, p))
+                                }}
+                                value={getVal(c, p) || ""}
+                                onChange={(e) => handleInlineEdit(c.id, p, e.target.value)}
+                              >
+                                <option value="">-</option>
+                                {p.options?.map(o => (
+                                  <option key={o.value} value={o.value}>{o.label}</option>
+                                ))}
+                              </select>
+                              {c.history_keys?.includes(p.field_key) && (
+                                <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, p.field_key)} title={`View ${p.name} History`} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
+                                  <History size={14} style={{ color: "#64748b" }} />
+                                </button>
+                              )}
+                            </div>
                           ) : (
                             <span className="cell-text" title={getVal(c, p)}>
                               {p.field_key === "company_name" ? <strong>{getVal(c, p)}</strong> : getVal(c, p)}
@@ -627,7 +667,15 @@ export function AssignLeadsPage() {
                           </span>
                         </td>
                         </>)}
-                     </tr>
+                      {canManage && (
+                        <td>
+                          <div className="row-actions">
+                            <button type="button" className="secondary icon-only" onClick={() => edit(c)} title="Edit Company"><Pencil size={16} /></button>
+                            <button type="button" className="danger icon-only" onClick={() => remove(c)} title="Delete Company"><Trash2 size={16} /></button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
                     );
                   })}
                 </tbody>

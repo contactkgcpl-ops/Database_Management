@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, X, Save, Calendar, Globe, Mail, Phone, MapPin, Tag, Building } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Save, Calendar, Globe, Mail, Phone, MapPin, Tag, Building, History } from "lucide-react";
 import { api } from "../api";
 import { useNotify } from "../components/NotificationProvider";
 import { useAuth } from "../context/AuthContext";
@@ -11,32 +11,77 @@ const emptyVendorForm = {
   company_name: "",
   vendor_name: "",
   products: [],
+  notes: [],
   email_id: "",
   city: "",
-  status: "active",
   website: "",
   quotation_updated_date: "",
   contact_numbers: [""],
 };
 
-const VENDOR_STATUS_OPTIONS = [
-  { label: "Active", value: "active" },
-  { label: "Inactive", value: "inactive" },
-  { label: "Blocked", value: "blocked" },
-];
-
-function ProductSelect({ value = [], onChange, existingOptions = [] }) {
+function PremiumMultiSelect({
+  value = [],
+  onChange,
+  existingOptions = [],
+  disabled = false,
+  variant = "inline",
+  placeholder = "Select or type...",
+  addNewPlaceholder = "Search or add...",
+  type = "items" // 'products' or 'notes'
+}) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
-  const wrapRef = React.useRef(null);
+  const [dropdownRect, setDropdownRect] = useState(null);
+  const controlRef = React.useRef(null);
+  const dropdownRef = React.useRef(null);
+
+  const updatePosition = () => {
+    if (controlRef.current) {
+      const rect = controlRef.current.getBoundingClientRect();
+      setDropdownRect({
+        top: rect.bottom + window.scrollY,
+        left: rect.left + window.scrollX,
+        width: rect.width,
+        fixedTop: rect.bottom,
+        fixedLeft: rect.left,
+        fixedHeight: rect.height,
+        controlTop: rect.top,
+      });
+    }
+  };
+
+  React.useEffect(() => {
+    if (open) {
+      updatePosition();
+    }
+  }, [open]);
 
   React.useEffect(() => {
     const close = (event) => {
-      if (!wrapRef.current?.contains(event.target)) setOpen(false);
+      if (
+        controlRef.current?.contains(event.target) ||
+        dropdownRef.current?.contains(event.target)
+      ) {
+        return;
+      }
+      setOpen(false);
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const handleScroll = () => {
+      setOpen(false);
+    };
+    window.addEventListener("scroll", handleScroll, true);
+    window.addEventListener("resize", handleScroll);
+    return () => {
+      window.removeEventListener("scroll", handleScroll, true);
+      window.removeEventListener("resize", handleScroll);
+    };
+  }, [open]);
 
   const filteredOptions = existingOptions.filter((opt) =>
     opt.toLowerCase().includes(query.trim().toLowerCase())
@@ -61,21 +106,85 @@ function ProductSelect({ value = [], onChange, existingOptions = [] }) {
     (opt) => opt.toLowerCase() === query.trim().toLowerCase()
   );
 
+  const isForm = variant === "form";
+
+  if (disabled) {
+    return (
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+        {value.length ? (
+          value.map((item, idx) => (
+            <span
+              key={idx}
+              style={{
+                backgroundColor: "#eff6ff",
+                color: "#1e40af",
+                padding: "2px 6px",
+                borderRadius: "4px",
+                fontSize: "11px",
+                border: "1px solid #dbeafe",
+                fontWeight: "600",
+              }}
+            >
+              {item}
+            </span>
+          ))
+        ) : (
+          <em className="muted">none</em>
+        )}
+      </div>
+    );
+  }
+
+  const dropdownHeight = 250;
+  const spaceBelow = dropdownRect ? (window.innerHeight - dropdownRect.fixedTop) : 300;
+  const openAbove = dropdownRect ? (spaceBelow < dropdownHeight && dropdownRect.controlTop > dropdownHeight) : false;
+
+  const dropdownStyle = dropdownRect
+    ? {
+        position: "fixed",
+        top: openAbove
+          ? `${dropdownRect.controlTop - dropdownHeight - 4}px`
+          : `${dropdownRect.fixedTop + 4}px`,
+        left: `${dropdownRect.fixedLeft}px`,
+        width: isForm ? `${dropdownRect.width}px` : "240px",
+        minWidth: "200px",
+        height: `${dropdownHeight}px`,
+        display: "flex",
+        flexDirection: "column",
+        zIndex: 9999,
+        background: "#fff",
+        border: "1px solid #cbd5e1",
+        borderRadius: "6px",
+        boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
+        padding: "8px",
+      }
+    : { display: "none" };
+
   return (
-    <div className="premium-multiselect-container" ref={wrapRef} style={{ position: "relative", width: "100%" }}>
+    <div
+      className="premium-multiselect-container"
+      style={{
+        width: "100%",
+        position: "relative",
+      }}
+    >
       <div
+        ref={controlRef}
         className="premium-select-control"
         style={{
           display: "flex",
           flexWrap: "wrap",
-          gap: "6px",
-          minHeight: "38px",
+          gap: isForm ? "6px" : "4px",
+          minHeight: isForm ? "38px" : "30px",
           border: "1px solid #cbd5e1",
           borderRadius: "6px",
-          padding: "6px 12px",
+          padding: isForm ? "6px 12px" : "4px 8px",
           cursor: "pointer",
           background: "#fff",
           alignItems: "center",
+          width: "100%",
+          boxSizing: "border-box",
+          userSelect: "none",
         }}
         onClick={() => setOpen(!open)}
       >
@@ -86,12 +195,12 @@ function ProductSelect({ value = [], onChange, existingOptions = [] }) {
               style={{
                 backgroundColor: "#eff6ff",
                 color: "#1e40af",
-                padding: "2px 8px",
+                padding: isForm ? "2px 8px" : "1px 6px",
                 borderRadius: "4px",
-                fontSize: "12px",
+                fontSize: isForm ? "12px" : "11px",
                 display: "inline-flex",
                 alignItems: "center",
-                gap: "4px",
+                gap: isForm ? "4px" : "2px",
                 border: "1px solid #dbeafe",
                 fontWeight: "600",
               }}
@@ -113,34 +222,22 @@ function ProductSelect({ value = [], onChange, existingOptions = [] }) {
                   display: "flex",
                 }}
               >
-                <X size={14} />
+                <X size={isForm ? 14 : 12} />
               </button>
             </span>
           ))
         ) : (
-          <span className="muted" style={{ color: "#94a3b8", fontSize: "13px" }}>Select or type products...</span>
+          <span className="muted" style={{ color: "#94a3b8", fontSize: isForm ? "13px" : "11px" }}>
+            {placeholder}
+          </span>
         )}
       </div>
 
-      {open && (
-        <div
-          className="premium-dropdown"
-          style={{
-            position: "absolute",
-            top: "105%",
-            left: 0,
-            width: "100%",
-            zIndex: 100,
-            background: "#fff",
-            border: "1px solid #cbd5e1",
-            borderRadius: "6px",
-            boxShadow: "0 10px 25px rgba(0,0,0,0.15)",
-            padding: "8px",
-          }}
-        >
+      {open && dropdownRect && (
+        <div ref={dropdownRef} className="premium-dropdown" style={dropdownStyle}>
           <input
             autoFocus
-            placeholder="Search or add custom product..."
+            placeholder={addNewPlaceholder}
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             onKeyDown={(e) => {
@@ -149,28 +246,33 @@ function ProductSelect({ value = [], onChange, existingOptions = [] }) {
                 handleAddNew();
               }
             }}
+            onClick={(e) => e.stopPropagation()}
             style={{
               width: "100%",
-              padding: "8px",
-              fontSize: "13px",
+              padding: "6px",
+              fontSize: "12px",
               border: "1px solid #cbd5e1",
               borderRadius: "4px",
               marginBottom: "8px",
               outline: "none",
+              boxSizing: "border-box",
             }}
           />
 
-          <div style={{ maxHeight: "200px", overflowY: "auto" }}>
+          <div style={{ flex: 1, overflowY: "auto" }}>
             {filteredOptions.map((opt, i) => {
               const selected = value.includes(opt);
               return (
                 <div
                   key={i}
-                  onClick={() => toggleOption(opt)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleOption(opt);
+                  }}
                   style={{
-                    padding: "8px",
+                    padding: "6px 8px",
                     cursor: "pointer",
-                    fontSize: "13px",
+                    fontSize: "12px",
                     display: "flex",
                     justifyContent: "space-between",
                     backgroundColor: selected ? "#f0fdf4" : "transparent",
@@ -187,24 +289,27 @@ function ProductSelect({ value = [], onChange, existingOptions = [] }) {
 
             {query.trim() && !exactMatchExists && (
               <div
-                onClick={handleAddNew}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleAddNew();
+                }}
                 style={{
-                  padding: "8px",
+                  padding: "6px 8px",
                   cursor: "pointer",
-                  fontSize: "13px",
+                  fontSize: "12px",
                   color: "#176b5b",
                   fontWeight: "bold",
                   borderTop: "1px solid #f1f5f9",
                   marginTop: "4px",
                 }}
               >
-                + Add "{query.trim()}" as a new product
+                + Add "{query.trim()}" as a new {type === "products" ? "product" : "note"}
               </div>
             )}
 
             {filteredOptions.length === 0 && !query.trim() && (
-              <div style={{ padding: "8px", color: "#94a3b8", textAlign: "center", fontSize: "13px" }}>
-                No products found
+              <div style={{ padding: "8px", color: "#94a3b8", textAlign: "center", fontSize: "12px" }}>
+                No {type} found
               </div>
             )}
           </div>
@@ -228,7 +333,7 @@ export function VendorsPage() {
     products: "",
     email_id: "",
     city: "",
-    status: "",
+    notes: "",
     website: "",
     contact_number: "",
   });
@@ -250,6 +355,60 @@ export function VendorsPage() {
   const [editingVendorId, setEditingVendorId] = useState(null);
   const [formState, setFormState] = useState(emptyVendorForm);
 
+  const [historyModalOpen, setHistoryModalOpen] = useState(false);
+  const [historyData, setHistoryData] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+
+  const allExistingNotes = useMemo(() => {
+    const set = new Set();
+    vendors.data?.forEach((v) => {
+      v.notes?.forEach((n) => {
+        if (n?.trim()) set.add(n.trim());
+      });
+    });
+    return Array.from(set).sort();
+  }, [vendors.data]);
+
+  const handleInlineNotesChange = async (vendorId, notesVal) => {
+    try {
+      await api.updateVendorInline(vendorId, {
+        field_key: "notes",
+        value: notesVal.join(","),
+        remark: "",
+      });
+      notify("Notes updated successfully", "success");
+      vendors.reload();
+    } catch (err) {
+      notify(err.message || "Failed to update notes", "error");
+    }
+  };
+
+  const handleInlineProductsChange = async (vendorId, productsVal) => {
+    try {
+      await api.updateVendorInline(vendorId, {
+        field_key: "products",
+        value: productsVal.join(","),
+        remark: "",
+      });
+      notify("Products updated successfully", "success");
+      vendors.reload();
+    } catch (err) {
+      notify(err.message || "Failed to update products", "error");
+    }
+  };
+
+  const openHistory = async (vendorId) => {
+    setHistoryModalOpen(true);
+    setHistoryLoading(true);
+    try {
+      const data = await api.getVendorHistory(vendorId);
+      setHistoryData(data);
+    } catch (err) {
+      notify(err.message || "Failed to load history", "error");
+    }
+    setHistoryLoading(false);
+  };
+
   const filteredVendors = useMemo(() => {
     return vendors.data.filter((v) => {
       return Object.entries(columnFilters).every(([key, filter]) => {
@@ -264,6 +423,12 @@ export function VendorsPage() {
           const filterParts = Array.isArray(filter) ? filter : String(filter).split(",").map(f => f.trim().toLowerCase()).filter(Boolean);
           if (filterParts.length === 0) return true;
           return v.products?.some(p => filterParts.some(fp => p.toLowerCase().includes(fp)));
+        }
+
+        if (key === "notes") {
+          const filterParts = Array.isArray(filter) ? filter : String(filter).split(",").map(f => f.trim().toLowerCase()).filter(Boolean);
+          if (filterParts.length === 0) return true;
+          return v.notes?.some(n => filterParts.some(fn => n.toLowerCase().includes(fn)));
         }
         
         const val = String(v[key] || "").toLowerCase();
@@ -295,9 +460,9 @@ export function VendorsPage() {
       company_name: v.company_name,
       vendor_name: v.vendor_name,
       products: v.products?.length ? [...v.products] : [],
+      notes: v.notes?.length ? [...v.notes] : [],
       email_id: v.email_id || "",
       city: v.city || "",
-      status: v.status || "active",
       website: v.website || "",
       quotation_updated_date: v.quotation_updated_date || "",
       contact_numbers: v.contact_numbers?.length ? [...v.contact_numbers] : [""],
@@ -337,6 +502,7 @@ export function VendorsPage() {
     const payload = {
       ...formState,
       products: formState.products.map(p => p.trim()).filter(Boolean),
+      notes: formState.notes.map(n => n.trim()).filter(Boolean),
       contact_numbers: formState.contact_numbers.map(c => c.trim()).filter(Boolean),
       quotation_updated_date: formState.quotation_updated_date || null,
     };
@@ -400,7 +566,7 @@ export function VendorsPage() {
                     <th style={{ width: "180px" }}>Contact Numbers</th>
                     <th style={{ width: "180px" }}>Email ID</th>
                     <th style={{ width: "120px" }}>City</th>
-                    <th style={{ width: "100px" }}>Status</th>
+                    <th style={{ width: "180px" }}>Notes</th>
                     <th style={{ width: "160px" }}>Website</th>
                     <th style={{ width: "150px" }}>Quotation Updated</th>
                     <th style={{ width: "130px" }}>Added By</th>
@@ -452,18 +618,13 @@ export function VendorsPage() {
                       />
                     </th>
                     <th>
-                      <select
-                        value={columnFilters.status}
-                        onChange={(e) => handleFilterChange("status", e.target.value)}
-                        style={{ width: "100%", padding: "4px", fontSize: "12px" }}
-                      >
-                        <option value="">All</option>
-                        {VENDOR_STATUS_OPTIONS.map((opt) => (
-                          <option key={opt.value} value={opt.value}>
-                            {opt.label}
-                          </option>
-                        ))}
-                      </select>
+                      <GridFilterDropdown
+                        label="Notes"
+                        options={allExistingNotes}
+                        value={columnFilters.notes ? (Array.isArray(columnFilters.notes) ? columnFilters.notes : columnFilters.notes.split(",")) : []}
+                        onChange={(val) => handleFilterChange("notes", val)}
+                        isMulti={true}
+                      />
                     </th>
                     <th>
                       <input
@@ -485,25 +646,34 @@ export function VendorsPage() {
                       </td>
                       <td>{v.vendor_name}</td>
                       <td>
-                        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
-                          {v.products?.length ? (
-                            v.products.map((p, idx) => (
-                              <span
-                                key={idx}
-                                style={{
-                                  backgroundColor: "#eff6ff",
-                                  padding: "2px 6px",
-                                  borderRadius: "4px",
-                                  fontSize: "11px",
-                                  border: "1px solid #dbeafe",
-                                  color: "#1e40af"
-                                }}
-                              >
-                                {p}
-                              </span>
-                            ))
-                          ) : (
-                            <em className="muted">none</em>
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px", minWidth: "160px" }}>
+                          <PremiumMultiSelect
+                            value={v.products || []}
+                            onChange={(nextVal) => handleInlineProductsChange(v.id, nextVal)}
+                            existingOptions={allExistingProducts}
+                            disabled={!canManage}
+                            variant="inline"
+                            placeholder="+ Add Product"
+                            addNewPlaceholder="Search or add custom product..."
+                            type="products"
+                          />
+                          {v.history_keys?.includes("products") && (
+                            <button
+                              type="button"
+                              className="cell-icon-button"
+                              onClick={() => openHistory(v.id)}
+                              title="View Products History"
+                              style={{
+                                padding: "4px",
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                              }}
+                            >
+                              <History size={14} style={{ color: "#64748b" }} />
+                            </button>
                           )}
                         </div>
                       </td>
@@ -532,20 +702,36 @@ export function VendorsPage() {
                       <td>{v.email_id || <em className="muted">-</em>}</td>
                       <td>{v.city || <em className="muted">-</em>}</td>
                       <td>
-                        <span
-                          className={`badge-${v.status}`}
-                          style={{
-                            fontSize: "11px",
-                            fontWeight: "600",
-                            padding: "3px 8px",
-                            borderRadius: "6px",
-                            textTransform: "capitalize",
-                            backgroundColor: v.status === "active" ? "#dcfce7" : v.status === "blocked" ? "#fee2e2" : "#f1f5f9",
-                            color: v.status === "active" ? "#15803d" : v.status === "blocked" ? "#b91c1c" : "#475569",
-                          }}
-                        >
-                          {v.status}
-                        </span>
+                        <div style={{ display: "flex", alignItems: "center", gap: "4px", minWidth: "160px" }}>
+                          <PremiumMultiSelect
+                            value={v.notes || []}
+                            onChange={(nextVal) => handleInlineNotesChange(v.id, nextVal)}
+                            existingOptions={allExistingNotes}
+                            disabled={!canManage}
+                            variant="inline"
+                            placeholder="+ Add Note"
+                            addNewPlaceholder="Search or add custom note..."
+                            type="notes"
+                          />
+                          {v.history_keys?.includes("notes") && (
+                            <button
+                              type="button"
+                              className="cell-icon-button"
+                              onClick={() => openHistory(v.id)}
+                              title="View Notes History"
+                              style={{
+                                padding: "4px",
+                                background: "none",
+                                border: "none",
+                                cursor: "pointer",
+                                display: "flex",
+                                alignItems: "center",
+                              }}
+                            >
+                              <History size={14} style={{ color: "#64748b" }} />
+                            </button>
+                          )}
+                        </div>
                       </td>
                       <td>
                         {v.website ? (
@@ -690,10 +876,14 @@ export function VendorsPage() {
 
                 <div className="form-group" style={{ gridColumn: "span 2" }}>
                   <label>Products</label>
-                  <ProductSelect
+                  <PremiumMultiSelect
                     value={formState.products}
                     onChange={(next) => setFormState((prev) => ({ ...prev, products: next }))}
                     existingOptions={allExistingProducts}
+                    variant="form"
+                    placeholder="Select or type products..."
+                    addNewPlaceholder="Search or add custom product..."
+                    type="products"
                   />
                 </div>
 
@@ -749,19 +939,17 @@ export function VendorsPage() {
                   </div>
                 </div>
 
-                <div className="form-group">
-                  <label>Status</label>
-                  <select
-                    value={formState.status}
-                    onChange={(e) => setFormState((prev) => ({ ...prev, status: e.target.value }))}
-                    style={{ width: "100%" }}
-                  >
-                    {VENDOR_STATUS_OPTIONS.map((opt) => (
-                      <option key={opt.value} value={opt.value}>
-                        {opt.label}
-                      </option>
-                    ))}
-                  </select>
+                <div className="form-group" style={{ gridColumn: "span 2" }}>
+                  <label>Notes</label>
+                  <PremiumMultiSelect
+                    value={formState.notes || []}
+                    onChange={(nextVal) => setFormState((prev) => ({ ...prev, notes: nextVal }))}
+                    existingOptions={allExistingNotes}
+                    variant="form"
+                    placeholder="Select or type notes..."
+                    addNewPlaceholder="Search or add custom note..."
+                    type="notes"
+                  />
                 </div>
 
                 <div className="form-group">
@@ -803,6 +991,90 @@ export function VendorsPage() {
           </div>
         </div>
       )}
+
+
+
+      {historyModalOpen && (
+        <div
+          className="modal-backdrop"
+          style={{
+            position: "fixed",
+            inset: 0,
+            backgroundColor: "rgba(0,0,0,0.4)",
+            display: "grid",
+            placeItems: "center",
+            zIndex: 1010,
+          }}
+        >
+          <div
+            className="modal"
+            style={{
+              maxWidth: "600px",
+              width: "95%",
+              backgroundColor: "#fff",
+              borderRadius: "8px",
+              overflow: "hidden",
+              boxShadow: "0 10px 30px rgba(0,0,0,0.25)",
+              fontFamily: "'Inter', sans-serif",
+            }}
+          >
+            <div
+              className="modal-head"
+              style={{
+                backgroundColor: "#176b5b",
+                color: "#fff",
+                padding: "14px 20px",
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+              }}
+            >
+              <h2 style={{ margin: 0, fontSize: "15px", fontWeight: "600" }}>
+                Vendor Change History
+              </h2>
+              <button
+                type="button"
+                onClick={() => setHistoryModalOpen(false)}
+                style={{ background: "transparent", border: "none", color: "#fff", cursor: "pointer" }}
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="modal-body" style={{ padding: "20px", maxHeight: "60vh", overflowY: "auto" }}>
+              {historyLoading ? (
+                <div style={{ textAlign: "center", padding: "20px", color: "#64748b" }}>Loading history...</div>
+              ) : historyData.length === 0 ? (
+                <div style={{ textAlign: "center", padding: "20px", color: "#64748b" }}>No history found.</div>
+              ) : (
+                <div style={{ display: "flex", flexDirection: "column", gap: "10px" }}>
+                  {historyData.map((h) => (
+                    <div key={h.id} style={{ padding: "10px", border: "1px solid #e2e8f0", borderRadius: "6px", background: "#f8fafc" }}>
+                      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "11px", color: "#64748b", fontWeight: "600" }}>
+                        <span>{new Date(h.created_at).toLocaleString()}</span>
+                        <span>{h.user_name || "System"}</span>
+                      </div>
+                      <div style={{ fontSize: "13px", color: "#334155" }}>
+                        Changed <strong>{h.field_name}</strong> from <span style={{ textDecoration: "line-through", color: "#94a3b8" }}>{h.old_value || "(empty)"}</span> to <span style={{ color: "#176b5b", fontWeight: "600" }}>{h.new_value || "(empty)"}</span>
+                      </div>
+                      {h.remark && (
+                        <div style={{ marginTop: "6px", padding: "8px", background: "#fff", border: "1px solid #e2e8f0", borderRadius: "4px", fontSize: "12px", color: "#475569" }}>
+                          <strong>Remark:</strong> {h.remark}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+            <div className="modal-actions" style={{ padding: "14px 20px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end" }}>
+              <button className="secondary icon-button" onClick={() => setHistoryModalOpen(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

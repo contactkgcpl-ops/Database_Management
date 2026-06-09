@@ -20,7 +20,8 @@ const splitCSVLine = (line) => {
     const result = [];
     let insideQuotes = false;
     let currentToken = "";
-    
+
+
     for (let i = 0; i < line.length; i++) {
         const char = line[i];
         if (char === '"') {
@@ -279,7 +280,7 @@ export function ImportCompaniesPage({ onBack }) {
             const idx = csvData.rows.findIndex(csvR => csvR.row_id === r.row_id);
             return validateRow(r, idx).issues.length === 0;
         });
-        
+
         if (fixedRows.length === 0) {
             notify("No corrected valid rows to import yet", "error");
             return;
@@ -518,10 +519,10 @@ export function ImportCompaniesPage({ onBack }) {
                                                     );
                                                 })}
                                                 <td className="action-cell">
-                                                    <button 
-                                                        type="button" 
-                                                        className="delete-row-btn" 
-                                                        onClick={() => deleteRow(row.row_id)} 
+                                                    <button
+                                                        type="button"
+                                                        className="delete-row-btn"
+                                                        onClick={() => deleteRow(row.row_id)}
                                                         title="Delete Row"
                                                     >
                                                         <Trash2 size={14} />
@@ -536,7 +537,7 @@ export function ImportCompaniesPage({ onBack }) {
                         </div>
                         <div className="modal-actions">
                             <button className="secondary icon-button" onClick={() => setStep(1)}>Back to Mapping</button>
-                            <button 
+                            <button
                                 type="button"
                                 className="secondary icon-button"
                                 onClick={() => {
@@ -678,10 +679,10 @@ export function ImportCompaniesPage({ onBack }) {
                                                     );
                                                 })}
                                                 <td className="action-cell">
-                                                    <button 
-                                                        type="button" 
-                                                        className="delete-row-btn" 
-                                                        onClick={() => deleteRow(row.row_id)} 
+                                                    <button
+                                                        type="button"
+                                                        className="delete-row-btn"
+                                                        onClick={() => deleteRow(row.row_id)}
                                                         title="Delete Row"
                                                     >
                                                         <Trash2 size={14} />
@@ -700,9 +701,9 @@ export function ImportCompaniesPage({ onBack }) {
                         </div>
                         <div className="modal-actions">
                             <button className="secondary icon-button" onClick={() => setStep(2)}>Back to Preview</button>
-                            <button 
-                                className="icon-button" 
-                                onClick={handleImportFixed} 
+                            <button
+                                className="icon-button"
+                                onClick={handleImportFixed}
                                 disabled={importing || csvData.rows.filter(r => invalidRowIds.includes(r.row_id)).filter(r => {
                                     const idx = csvData.rows.findIndex(csvR => csvR.row_id === r.row_id);
                                     return validateRow(r, idx).issues.length === 0;

@@ -1,6 +1,6 @@
 
 import React, { useMemo, useState } from "react";
-import { Columns3, GripVertical, MoreVertical, Ruler, Save, Search, X, Plus, Phone, Mail, MessageCircle, History, Pencil, Sparkles, SquareCheckBig, Download } from "lucide-react";
+import { Columns3, GripVertical, MoreVertical, Ruler, Save, Search, X, Plus, Phone, Mail, MessageCircle, History, Pencil, Sparkles, SquareCheckBig, Download, Trash2 } from "lucide-react";
 import { GridFilterDropdown } from "../components/GridFilterDropdown";
 import { ConnectedSourceActions } from "../components/ConnectedSourceActions";
 import { api } from "../api";
@@ -49,11 +49,34 @@ function isMultiSelectProperty(property) {
   return property?.object_type === "multiselect";
 }
 
+const getVerificationStatusStyle = (value) => {
+  if (value === "verified") return { backgroundColor: "#d1fae5", color: "#065f46", fontWeight: "700", border: "1px solid #a7f3d0" };
+  if (value === "pending") return { backgroundColor: "#fef3c7", color: "#92400e", fontWeight: "700", border: "1px solid #fde68a" };
+  if (value === "unverified") return { backgroundColor: "#fee2e2", color: "#991b1b", fontWeight: "700", border: "1px solid #fecaca" };
+  return {};
+};
+
 const COLD_LEAD_STATUSES = ["new", "connected", "not_connected", "converted", "not_interested"];
 
-export function MyLeadsPage() {
+export function MyLeadsPage({ setPage, setEditingId }) {
   const notify = useNotify();
   const { user } = useAuth();
+  const canManage = user?.permissions?.includes("companies.manage");
+  const edit = (company) => {
+    setEditingId(company.id);
+    setPage("add-company");
+  };
+
+  const remove = async (company) => {
+    if (!window.confirm(`Delete ${company.company_name}?`)) return;
+    try {
+      await api.deleteCompany(company.id);
+      notify("Company deleted", "success");
+      leads.reload();
+    } catch (err) {
+      notify("Failed to delete company", "error");
+    }
+  };
   const [q, setQ] = useState("");
   const [columnChooserOpen, setColumnChooserOpen] = useState(false);
   const [columnSearch, setColumnSearch] = useState("");
@@ -457,6 +480,7 @@ export function MyLeadsPage() {
                         )}
                       </th>
                     ))}
+                    {canManage && <th style={{ width: "100px" }}>Actions</th>}
                   </tr>
                   <tr className="filter-row">
                     {bulkMode && <th className="bulk-select-col" />}
@@ -482,6 +506,7 @@ export function MyLeadsPage() {
                         </th>
                       );
                     })}
+                    {canManage && <th />}
                   </tr>
                 </thead>
                 <tbody>
@@ -576,7 +601,14 @@ export function MyLeadsPage() {
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <select
                                 className="inline-select"
-                                style={{ flex: 1, padding: "4px", border: "1px solid #e2e8f0", borderRadius: "4px", background: "transparent", fontSize: "12px", color: "#334155" }}
+                                style={{
+                                  flex: 1,
+                                  padding: "4px",
+                                  border: "1px solid #e2e8f0",
+                                  borderRadius: "4px",
+                                  fontSize: "12px",
+                                  ...getVerificationStatusStyle(getPropertyValue(lead, p))
+                                }}
                                 value={getPropertyValue(lead, p) || ""}
                                 onChange={(e) => handleInlineEdit(lead.id, p, e.target.value)}
                               >
@@ -585,6 +617,11 @@ export function MyLeadsPage() {
                                   <option key={o.value} value={o.value}>{o.label}</option>
                                 ))}
                               </select>
+                              {lead.history_keys?.includes(p.field_key) && (
+                                <button type="button" className="cell-icon-button" onClick={() => openHistory(lead.id, p.field_key)} title={`View ${p.name} History`} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
+                                  <History size={14} style={{ color: "#64748b" }} />
+                                </button>
+                              )}
                             </div>
                           ) : (
                             <span className="cell-text" title={getPropertyValue(lead, p)}>
@@ -593,6 +630,14 @@ export function MyLeadsPage() {
                           )}
                         </td>
                       ))}
+                      {canManage && (
+                        <td>
+                          <div className="row-actions">
+                            <button type="button" className="secondary icon-only" onClick={() => edit(lead)} title="Edit Company"><Pencil size={16} /></button>
+                            <button type="button" className="danger icon-only" onClick={() => remove(lead)} title="Delete Company"><Trash2 size={16} /></button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                     );
                   })}

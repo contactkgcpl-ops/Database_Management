@@ -27,7 +27,8 @@ function PremiumMultiSelect({
   variant = "inline",
   placeholder = "Select or type...",
   addNewPlaceholder = "Search or add...",
-  type = "items" // 'products' or 'notes'
+  type = "items", // 'products' or 'notes'
+  isMulti = true,
 }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
@@ -88,16 +89,29 @@ function PremiumMultiSelect({
   );
 
   const toggleOption = (opt) => {
-    const next = value.includes(opt)
-      ? value.filter((v) => v !== opt)
-      : [...value, opt];
-    onChange(next);
+    if (isMulti) {
+      const next = value.includes(opt)
+        ? value.filter((v) => v !== opt)
+        : [...value, opt];
+      onChange(next);
+    } else {
+      const next = value.includes(opt) ? [] : [opt];
+      onChange(next);
+      setOpen(false);
+    }
   };
 
   const handleAddNew = () => {
     const val = query.trim();
-    if (val && !value.includes(val)) {
-      onChange([...value, val]);
+    if (val) {
+      if (isMulti) {
+        if (!value.includes(val)) {
+          onChange([...value, val]);
+        }
+      } else {
+        onChange([val]);
+        setOpen(false);
+      }
       setQuery("");
     }
   };
@@ -712,6 +726,7 @@ export function VendorsPage() {
                             placeholder="+ Add Note"
                             addNewPlaceholder="Search or add custom note..."
                             type="notes"
+                            isMulti={false}
                           />
                           {v.history_keys?.includes("notes") && (
                             <button
@@ -949,6 +964,7 @@ export function VendorsPage() {
                     placeholder="Select or type notes..."
                     addNewPlaceholder="Search or add custom note..."
                     type="notes"
+                    isMulti={false}
                   />
                 </div>
 

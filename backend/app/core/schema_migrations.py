@@ -512,6 +512,59 @@ def migrate_vendors_schema(db: Session) -> None:
                     print(f"Error adding contact column: {e}")
 
 
+def migrate_hourly_reports_calling_schema(db: Session) -> None:
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    dialect = engine.dialect.name
+
+    # Check if 'hourly_reports' table exists and check/add 'work_type' column
+    if "hourly_reports" in tables:
+        columns = {column["name"] for column in inspector.get_columns("hourly_reports")}
+        if "work_type" not in columns:
+            db.execute(text("ALTER TABLE hourly_reports ADD COLUMN work_type VARCHAR(50) DEFAULT 'General'"))
+            db.commit()
+
+    # Check/create 'hourly_report_calls' table
+    if "hourly_report_calls" not in tables:
+        if dialect == "mysql":
+            db.execute(
+                text(
+                    """
+                    CREATE TABLE hourly_report_calls (
+                        id INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                        report_id INTEGER NOT NULL,
+                        contact_number VARCHAR(50) NOT NULL,
+                        contact_person VARCHAR(120) NOT NULL,
+                        contact_for TEXT NOT NULL,
+                        created_at DATETIME,
+                        updated_at DATETIME,
+                        FOREIGN KEY(report_id) REFERENCES hourly_reports (id) ON DELETE CASCADE,
+                        INDEX ix_hourly_report_calls_report_id (report_id)
+                    )
+                    """
+                )
+            )
+        else:
+            db.execute(
+                text(
+                    """
+                    CREATE TABLE hourly_report_calls (
+                        id INTEGER PRIMARY KEY,
+                        report_id INTEGER NOT NULL,
+                        contact_number VARCHAR(50) NOT NULL,
+                        contact_person VARCHAR(120) NOT NULL,
+                        contact_for TEXT NOT NULL,
+                        created_at DATETIME,
+                        updated_at DATETIME,
+                        FOREIGN KEY(report_id) REFERENCES hourly_reports (id) ON DELETE CASCADE
+                    )
+                    """
+                )
+            )
+            db.execute(text("CREATE INDEX ix_hourly_report_calls_report_id ON hourly_report_calls (report_id)"))
+        db.commit()
+
+
 def migrate_all(db: Session) -> None:
     # 1. First, update the 'properties' table schema so ORM queries don't fail
     migrate_property_filter_type(db)
@@ -532,4 +585,5 @@ def migrate_all(db: Session) -> None:
     migrate_lead_manage_inquiry_field(db)
     consolidate_product_to_requirement(db)
     migrate_vendors_schema(db)
+    migrate_hourly_reports_calling_schema(db)
 

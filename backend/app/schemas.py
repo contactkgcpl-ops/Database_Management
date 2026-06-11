@@ -293,12 +293,29 @@ class UserTimeLogOut(BaseModel):
 
 # --- Hourly Reporting ---
 
+class HourlyReportCallCreate(BaseModel):
+    contact_number: str
+    contact_person: str
+    contact_for: str
+
+
+class HourlyReportCallOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    report_id: int
+    contact_number: str
+    contact_person: str
+    contact_for: str
+
+
 class HourlyReportCreate(BaseModel):
     work_date: date
     start_time: str
     end_time: str
     description: str
     status: str = "Draft"
+    work_type: str = "General"
+    calls: list[HourlyReportCallCreate] = []
 
 
 class HourlyReportUpdate(BaseModel):
@@ -306,6 +323,8 @@ class HourlyReportUpdate(BaseModel):
     end_time: str | None = None
     description: str | None = None
     status: str | None = None
+    work_type: str | None = None
+    calls: list[HourlyReportCallCreate] | None = None
 
 
 class HourlyReportOut(BaseModel):
@@ -316,6 +335,8 @@ class HourlyReportOut(BaseModel):
     end_time: str
     description: str
     status: str
+    work_type: str
+    calls: list[HourlyReportCallOut] = []
     created_at: datetime
     updated_at: datetime
     

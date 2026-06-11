@@ -288,8 +288,22 @@ class HourlyReport(Base, TimestampMixin):
     end_time: Mapped[str] = mapped_column(String(10))   # e.g. "11:00"
     description: Mapped[str] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="Draft") # Draft, Submitted
+    work_type: Mapped[str] = mapped_column(String(50), default="General", server_default="General")
 
     user: Mapped[User] = relationship()
+    calls: Mapped[list["HourlyReportCall"]] = relationship(cascade="all, delete-orphan", back_populates="report")
+
+
+class HourlyReportCall(Base, TimestampMixin):
+    __tablename__ = "hourly_report_calls"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    report_id: Mapped[int] = mapped_column(ForeignKey("hourly_reports.id", ondelete="CASCADE"), index=True)
+    contact_number: Mapped[str] = mapped_column(String(50))
+    contact_person: Mapped[str] = mapped_column(String(120))
+    contact_for: Mapped[str] = mapped_column(Text)
+
+    report: Mapped[HourlyReport] = relationship(back_populates="calls")
 
 
 class GlobalChatMessage(Base, TimestampMixin):

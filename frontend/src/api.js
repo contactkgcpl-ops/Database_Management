@@ -120,7 +120,19 @@ export const api = {
   updateProperty: (id, data) => request(`/properties/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   updatePropertyGridColumns: (columns) => request("/properties/grid-columns", { method: "PUT", body: JSON.stringify({ columns }) }),
   deleteProperty: (id) => request(`/properties/${id}`, { method: "DELETE" }),
-  companies: (q = "") => request(`/companies${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  companies: (q = "", page = null, pageSize = null, sortKey = "", sortDir = "", filters = {}) => {
+    const params = new URLSearchParams();
+    if (q) params.set("q", q);
+    if (page !== null && page !== undefined) params.set("page", page);
+    if (pageSize !== null && pageSize !== undefined) params.set("page_size", pageSize);
+    if (sortKey) params.set("sort_key", sortKey);
+    if (sortDir) params.set("sort_dir", sortDir);
+    if (filters && Object.keys(filters).length > 0) {
+      params.set("filters", JSON.stringify(filters));
+    }
+    const queryString = params.toString();
+    return request(`/companies${queryString ? `?${queryString}` : ""}`);
+  },
   company: (id) => request(`/companies/${id}`),
   importCompanies: (rows) => Promise.all(rows.map((row) => request("/companies", { method: "POST", body: JSON.stringify(row) }))),
   createCompany: (data) => request("/companies", { method: "POST", body: JSON.stringify(data) }),
@@ -208,4 +220,15 @@ export const api = {
   deleteVendor: (id) => request(`/vendors/${id}`, { method: "DELETE" }),
   updateVendorInline: (vendorId, payload) => request(`/vendors/${vendorId}/inline-update`, { method: "PUT", body: JSON.stringify(payload) }),
   getVendorHistory: (vendorId) => request(`/vendors/${vendorId}/history`),
+  // Orders & BOM
+  orders: (q = "") => request(`/orders${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  order: (id) => request(`/orders/${id}`),
+  createOrder: (data) => request("/orders", { method: "POST", body: JSON.stringify(data) }),
+  updateOrder: (id, data) => request(`/orders/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteOrder: (id) => request(`/orders/${id}`, { method: "DELETE" }),
+  getBOM: (orderId) => request(`/orders/${orderId}/bom`),
+  saveBOM: (orderId, data) => request(`/orders/${orderId}/bom`, { method: "POST", body: JSON.stringify(data) }),
+  sendBOMToPurchase: (orderId) => request(`/orders/${orderId}/bom/send-to-purchase`, { method: "POST" }),
+  purchaseIndents: () => request("/orders/purchase-indents"),
+  updateBOMStatus: (orderId, status) => request(`/orders/${orderId}/bom/status`, { method: "PUT", body: JSON.stringify({ status }) }),
 };

@@ -25,6 +25,9 @@ import { NotificationBell } from "../components/NotificationBell";
 import { GlobalChat } from "../components/GlobalChat";
 import { TasksPage } from "../pages/TasksPage";
 import { StaffReportPage } from "../pages/StaffReportPage";
+import { OrdersPage } from "../pages/OrdersPage";
+import { BOMPage } from "../pages/BOMPage";
+import { PurchaseIndentsPage } from "../pages/PurchaseIndentsPage";
 
 const pageMap = {
   dashboard: DashboardPage,
@@ -47,6 +50,9 @@ const pageMap = {
   "hourly-reports": HourlyReportsPage,
   "team-reports": TeamReportsPage,
   "staff-report": StaffReportPage,
+  orders: OrdersPage,
+  "create-bom": BOMPage,
+  "purchase-indents": PurchaseIndentsPage,
 };
 
 function secondsToLabel(seconds = 0) {
@@ -77,10 +83,12 @@ export function AppLayout({ page, setPage }) {
   const [lastNotifiedHour, setLastNotifiedHour] = useState(0);
   const [taskDetailId, setTaskDetailId] = useState(null);
   const [requirementDetailId, setRequirementDetailId] = useState(null);
+  const [activeOrderId, setActiveOrderId] = useState(null);
 
   const navigateToPage = (newPage) => {
     setTaskDetailId(null);
     setRequirementDetailId(null);
+    if (newPage !== "create-bom") setActiveOrderId(null);
     setPage(newPage);
   };
   const canUseTime = user.permissions.some((permission) => ["time.view", "time.break", "time.manage"].includes(permission));
@@ -310,6 +318,8 @@ export function AppLayout({ page, setPage }) {
           setTaskDetailId={setTaskDetailId}
           requirementDetailId={requirementDetailId}
           setRequirementDetailId={setRequirementDetailId}
+          activeOrderId={activeOrderId}
+          setActiveOrderId={setActiveOrderId}
         />
         {canUseTime && timeLog?.status === "on_break" && (
           <div className="break-screen">

@@ -12,6 +12,19 @@ const sanitizeValue = (val) => {
         .trim();
 };
 
+const cleanContactNumber = (val) => {
+    if (!val) return "";
+    // Remove all non-digit characters
+    let cleaned = String(val).replace(/\D/g, "");
+    // Remove leading country code or zero for Indian numbers
+    if (cleaned.length === 11 && cleaned.startsWith("0")) {
+        cleaned = cleaned.substring(1);
+    } else if (cleaned.length === 12 && cleaned.startsWith("91")) {
+        cleaned = cleaned.substring(2);
+    }
+    return cleaned;
+};
+
 // Regex helpers for format validation
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const contactNumberRegex = /^\+?[0-9\s\-()]{7,18}$/;
@@ -64,7 +77,7 @@ const buildCompanyPayload = (row, mapping, activeProperties) => {
     };
     Object.entries(mapping).forEach(([headerId, fieldKey]) => {
         if (!fieldKey) return;
-        const val = String(row[headerId] || "").trim();
+        let val = String(row[headerId] || "").trim();
         if (!val) return;
 
         if (fieldKey === "company_name") {
@@ -72,6 +85,9 @@ const buildCompanyPayload = (row, mapping, activeProperties) => {
         } else {
             const prop = activeProperties.find(p => p.field_key === fieldKey);
             if (prop) {
+                if (fieldKey === "contact_number") {
+                    val = cleanContactNumber(val);
+                }
                 payload.property_values.push({ property_id: prop.id, value: val });
             }
         }
@@ -150,8 +166,9 @@ export function ImportCompaniesPage({ onBack }) {
                     issues.push(`Invalid Email Format for "${val}" (expected: name@domain.com)`);
                 }
             } else if (fieldKey === "contact_number" || fieldKey.toLowerCase().includes("mobile") || fieldKey.toLowerCase().includes("phone")) {
-                if (!contactNumberRegex.test(val)) {
-                    issues.push(`Invalid Mobile/Phone Format for "${val}" (7-18 digits, optional +)`);
+                const cleaned = cleanContactNumber(val);
+                if (!cleaned || cleaned.length < 7 || cleaned.length > 15) {
+                    issues.push(`Invalid Mobile/Phone Format for "${val}" (Only numbers allowed, 7-15 digits after removing country code/symbols)`);
                 }
             }
         });
@@ -170,6 +187,9 @@ export function ImportCompaniesPage({ onBack }) {
                 const firstDuplicateIdx = csvData.rows.findIndex((r, idx) => {
                     if (idx >= rowIndex) return false;
                     const otherVal = String(r[headerId] || "").trim();
+                    if (fieldKey === "contact_number") {
+                        return cleanContactNumber(otherVal) === cleanContactNumber(val);
+                    }
                     return otherVal.toLowerCase() === val.toLowerCase();
                 });
                 if (firstDuplicateIdx !== -1) {
@@ -186,6 +206,10 @@ export function ImportCompaniesPage({ onBack }) {
                     return c.property_values?.some(pv => {
                         if (pv.field_key !== fieldKey && pv.property_id !== prop?.id) return false;
                         const vals = (pv.value || "").split(",").map(v => v.trim().toLowerCase());
+                        if (fieldKey === "contact_number") {
+                            const cleanedCsvVal = cleanContactNumber(val);
+                            return vals.some(dbV => cleanContactNumber(dbV) === cleanedCsvVal);
+                        }
                         return vals.includes(val.toLowerCase());
                     });
                 });

@@ -21,6 +21,7 @@ from app.modules.reporting import router as reporting
 from app.modules.chat import router as chat
 from app.modules.tasks import router as tasks
 from app.modules.vendors import router as vendors
+from app.modules.orders import router as orders
 from app.seed import seed_defaults
 
 settings = get_settings()
@@ -69,4 +70,5 @@ app.include_router(reporting.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
 app.include_router(vendors.router, prefix="/api")
+app.include_router(orders.router, prefix="/api")
 # trigger reload for schema migration

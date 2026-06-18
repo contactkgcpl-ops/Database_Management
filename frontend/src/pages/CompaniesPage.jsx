@@ -93,7 +93,7 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
   const [draggedColumn, setDraggedColumn] = useState(null);
   const [companySort, setCompanySort] = useState({ key: "company_name", direction: "asc" });
   const [companyPage, setCompanyPage] = useState(1);
-  const [companyPageSize, setCompanyPageSize] = useState(10);
+  const [companyPageSize, setCompanyPageSize] = useState(50);
   const [columnWidthEdit, setColumnWidthEdit] = useState(false);
   const [draftColumnWidths, setDraftColumnWidths] = useState({});
   const [columnFilters, setColumnFilters] = useState({});
@@ -126,7 +126,10 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
     }
   };
 
-  const companies = useLoad(() => api.companies(q), [q]);
+  const companies = useLoad(
+    () => api.companies(q, companyPage, companyPageSize, companySort.key, companySort.direction, columnFilters),
+    [q, companyPage, companyPageSize, companySort.key, companySort.direction, columnFilters]
+  );
   const properties = useLoad(() => api.properties(), []);
   const propertyGrids = useLoad(() => api.propertyGrids(), []);
 
@@ -150,36 +153,12 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
     [availableGridProperties, selectedColumnKeys]
   );
 
-  const filteredCompanies = useMemo(() => {
-    return companies.data.filter((company) =>
-      gridProperties.every((property) => {
-        const filter = columnFilters[property.field_key];
-        if (!filter || (Array.isArray(filter) && filter.length === 0)) return true;
+  const items = companies.data?.items || [];
+  const totalRows = companies.data?.total || 0;
 
-        const value = String(getCompanyPropertyValue(company, property)).toLowerCase();
-
-        if (Array.isArray(filter)) {
-          const valueAtoms = value.split(",").map(s => s.trim());
-          return filter.some(f => valueAtoms.includes(String(f).toLowerCase()));
-        }
-
-        return value.includes(String(filter).toLowerCase());
-      })
-    );
-  }, [companies.data, gridProperties, columnFilters]);
-
-  const sortedCompanies = useMemo(() => {
-    return [...filteredCompanies].sort((a, b) => {
-      const prop = gridProperties.find((p) => p.field_key === companySort.key);
-      const valA = prop ? getCompanyPropertyValue(a, prop) : a.company_name;
-      const valB = prop ? getCompanyPropertyValue(b, prop) : b.company_name;
-      return companySort.direction === "asc" ? String(valA).localeCompare(String(valB)) : String(valB).localeCompare(String(valA));
-    });
-  }, [filteredCompanies, gridProperties, companySort]);
-
-  const companyTotalPages = Math.max(1, Math.ceil(sortedCompanies.length / companyPageSize));
+  const visibleCompanies = items;
+  const companyTotalPages = Math.max(1, Math.ceil(totalRows / companyPageSize));
   const currentCompanyPage = Math.min(companyPage, companyTotalPages);
-  const visibleCompanies = sortedCompanies.slice((currentCompanyPage - 1) * companyPageSize, currentCompanyPage * companyPageSize);
 
   const toggleCompanySort = (key) => setCompanySort((current) => ({ key, direction: current.key === key && current.direction === "asc" ? "desc" : "asc" }));
   const getColumnWidth = (property) => {
@@ -288,13 +267,13 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
       </div>
 
       <div className="data-grid">
-        {!companies.data.length ? (
+        {!items.length ? (
           <div className="muted">No companies found</div>
         ) : (
           <>
             {bulkMode && (
               <div className="bulk-action-bar" style={{ display: 'flex', alignItems: 'center', gap: '12px', padding: '10px 16px', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '8px', marginBottom: '12px' }}>
-                <button type="button" className="bulk-link" onClick={() => setSelectedCompanyIds(filteredCompanies.map((c) => Number(c.id)))} style={{ background: 'none', border: 'none', color: '#176b5b', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Select all</button>
+                <button type="button" className="bulk-link" onClick={() => setSelectedCompanyIds(visibleCompanies.map((c) => Number(c.id)))} style={{ background: 'none', border: 'none', color: '#176b5b', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Select all</button>
                 <button type="button" className="bulk-link" onClick={() => setSelectedCompanyIds([])} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Unselect all</button>
                 <strong style={{ fontSize: '13px', color: '#1e293b' }}>{selectedCompanyIds.length}</strong>
                 <span style={{ fontSize: '13px', color: '#64748b' }}>Items Selected</span>
@@ -323,7 +302,7 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
                     {gridProperties.map((p) => {
                       const filterVal = columnFilters[p.field_key] || "";
 
-                      const dataValues = companies.data.map(c => getCompanyPropertyValue(c, p))
+                      const dataValues = items.map(c => getCompanyPropertyValue(c, p))
                         .flatMap(v => String(v).split(",").map(s => s.trim()))
                         .filter(Boolean);
                       const optionMap = new Map(propertyOptions(p).map((option) => [String(option.value), option.label]));
@@ -436,10 +415,10 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
               page={currentCompanyPage}
               totalPages={companyTotalPages}
               pageSize={companyPageSize}
-              totalRows={sortedCompanies.length}
+              totalRows={totalRows}
               onPageChange={setCompanyPage}
               onPageSizeChange={(size) => { setCompanyPageSize(size); setCompanyPage(1); }}
-              pageSizeOptions={[10, 25, 50, 100]}
+              pageSizeOptions={[50, 75, 100, 150, 200, 500]}
             />
           </>
         )}

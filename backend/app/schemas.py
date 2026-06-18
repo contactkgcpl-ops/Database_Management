@@ -202,6 +202,11 @@ class CompanyOut(CompanyBase):
     is_inquiry: bool | None = False
 
 
+class PaginatedCompaniesOut(BaseModel):
+    items: list[CompanyOut]
+    total: int
+
+
 class LeadPropertyValueOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int
@@ -496,5 +501,101 @@ class VendorHistoryOut(BaseModel):
     user_id: int | None = None
     user_name: str | None = None
     created_at: datetime
+
+
+# --- Orders and BOM Schemas ---
+
+class BOMItemCreate(BaseModel):
+    item_name: str = Field(min_length=1, max_length=255)
+    quantity: float
+    available_stock: float = 0.0
+    unit: str = Field(min_length=1, max_length=50)
+    supplier: str | None = None
+    specification: str | None = None
+    estimated_cost: float | None = 0.0
+    remarks: str | None = None
+
+
+class BOMItemOut(BaseModel):
+    id: int
+    bom_id: int
+    item_name: str
+    quantity: float
+    available_stock: float
+    unit: str
+    supplier: str | None = None
+    specification: str | None = None
+    estimated_cost: float | None = 0.0
+    remarks: str | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BOMCreate(BaseModel):
+    items: list[BOMItemCreate] = []
+
+
+class OrderCreate(BaseModel):
+    order_number: str | None = None
+    company_id: int | None = None
+    company_name: str | None = None
+    order_date: date
+    delivery_date: date | None = None
+    amount_in_rupee: float = 0.0
+    quantity: float = 1.0
+    total_amount: float = 0.0
+    description: str | None = None
+    status: str = "Pending"
+
+
+class OrderUpdate(BaseModel):
+    order_number: str | None = None
+    company_id: int | None = None
+    company_name: str | None = None
+    order_date: date | None = None
+    delivery_date: date | None = None
+    amount_in_rupee: float | None = None
+    quantity: float | None = None
+    total_amount: float | None = None
+    description: str | None = None
+    status: str | None = None
+
+
+class OrderOut(BaseModel):
+    id: int
+    order_number: str
+    company_id: int | None = None
+    company_name: str | None = None
+    order_date: date
+    delivery_date: date | None = None
+    amount_in_rupee: float
+    quantity: float
+    total_amount: float
+    description: str | None = None
+    status: str
+    created_by_id: int | None = None
+    created_by_name: str | None = None
+    created_at: datetime
+    updated_at: datetime
+    has_bom: bool = False
+    bom_status: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class BOMOut(BaseModel):
+    id: int
+    order_id: int
+    status: str
+    created_by_id: int | None = None
+    items: list[BOMItemOut] = []
+    order: OrderOut | None = None
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 

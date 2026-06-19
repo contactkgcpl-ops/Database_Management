@@ -15,43 +15,20 @@ from app.modules.companies.services import (
     update_company,
     assign_company,
     import_upsert_company,
-    list_companies_paginated,
 )
-from app.schemas import CompanyCreate, CompanyOut, CompanyUpdate, CompanyImportUpsert, PaginatedCompaniesOut
+from app.schemas import CompanyCreate, CompanyOut, CompanyUpdate, CompanyImportUpsert
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
 
-@router.get("", response_model=PaginatedCompaniesOut | list[CompanyOut])
+@router.get("", response_model=list[CompanyOut])
 def list_company_records(
     q: str | None = None,
-    page: int | None = None,
-    page_size: int | None = None,
-    sort_key: str | None = None,
-    sort_dir: str | None = None,
-    filters: str | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("companies.view")),
 ):
-    import json
-    parsed_filters = None
-    if filters:
-        try:
-            parsed_filters = json.loads(filters)
-        except Exception:
-            pass
-
-    if page is not None or page_size is not None:
-        p = page or 1
-        ps = page_size or 50
-        companies, total = list_companies_paginated(db, q, p, ps, sort_key, sort_dir, parsed_filters)
-        return {
-            "items": [to_company_out(db, company) for company in companies],
-            "total": total
-        }
-    else:
-        companies = list_companies(db, q)
-        return [to_company_out(db, company) for company in companies]
+    companies = list_companies(db, q)
+    return [to_company_out(db, company) for company in companies]
 
 
 @router.get("/my", response_model=list[CompanyOut])

@@ -38,14 +38,12 @@ export const navigation = [
       { key: "inquiries", label: "Inquiries", icon: Sparkles, page: "inquiries", permission: "inquiry.view" },
     ],
   },
-  { key: "orders", label: "Orders", icon: ShoppingCart, page: "orders", permission: "orders.view" },
   {
     key: "purchase",
     label: "Purchase",
     icon: ShoppingCart,
     children: [
       { key: "vendors", label: "Vendors", icon: Users, page: "vendors", permission: "vendors.view" },
-      { key: "purchase-indents", label: "Purchase Indents", icon: ClipboardList, page: "purchase-indents", permission: "vendors.view" },
     ],
   },
   { key: "properties", label: "Properties", icon: ListTree, page: "properties", permission: "properties.view" },

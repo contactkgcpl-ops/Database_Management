@@ -972,8 +972,8 @@ header {
 }
 
 .data-grid .table-wrap {
-  max-height: calc(100vh - 140px);
-  min-height: 500px;
+  max-height: calc(100vh - 220px);
+  min-height: 280px;
   overflow: auto;
 }
 

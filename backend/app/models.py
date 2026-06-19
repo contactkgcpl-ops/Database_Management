@@ -463,58 +463,6 @@ class VendorNote(Base, TimestampMixin):
     vendor: Mapped[Vendor] = relationship(back_populates="notes")
 
 
-class Order(Base, TimestampMixin):
-    __tablename__ = "orders"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    order_number: Mapped[str] = mapped_column(String(80), unique=True, index=True)
-    company_id: Mapped[int | None] = mapped_column(ForeignKey("companies.id", ondelete="SET NULL"), index=True)
-    company_name: Mapped[str | None] = mapped_column(String(180), nullable=True)
-    order_date: Mapped[date] = mapped_column(Date)
-    delivery_date: Mapped[date | None] = mapped_column(Date)
-    amount_in_rupee: Mapped[float] = mapped_column(Float, default=0.0)
-    quantity: Mapped[float] = mapped_column(Float, default=1.0)
-    total_amount: Mapped[float] = mapped_column(Float, default=0.0)
-    description: Mapped[str | None] = mapped_column(Text)
-    status: Mapped[str] = mapped_column(String(50), default="Pending")  # "Pending", "BOM Created", "BOM Sent to Purchase", "In Progress", "In Production", "Completed", "Cancelled"
-    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
-
-    company: Mapped["Company | None"] = relationship(foreign_keys=[company_id])
-    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_id])
-    bom: Mapped["BOM | None"] = relationship(back_populates="order", cascade="all, delete-orphan", uselist=False)
-
-
-class BOM(Base, TimestampMixin):
-    __tablename__ = "boms"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    order_id: Mapped[int] = mapped_column(ForeignKey("orders.id", ondelete="CASCADE"), unique=True)
-    status: Mapped[str] = mapped_column(String(50), default="Draft")  # "Draft", "Sent to Purchase"
-    created_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
-
-    order: Mapped[Order] = relationship(back_populates="bom")
-    created_by: Mapped[User | None] = relationship(foreign_keys=[created_by_id])
-    items: Mapped[list["BOMItem"]] = relationship(back_populates="bom", cascade="all, delete-orphan")
-
-
-class BOMItem(Base, TimestampMixin):
-    __tablename__ = "bom_items"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    bom_id: Mapped[int] = mapped_column(ForeignKey("boms.id", ondelete="CASCADE"), index=True)
-    item_name: Mapped[str] = mapped_column(String(255))
-    quantity: Mapped[float] = mapped_column(Float)
-    available_stock: Mapped[float] = mapped_column(Float, default=0.0)
-    unit: Mapped[str] = mapped_column(String(50))
-    supplier: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    specification: Mapped[str | None] = mapped_column(String(255))
-    estimated_cost: Mapped[float | None] = mapped_column(Float, default=0.0)
-    remarks: Mapped[str | None] = mapped_column(Text)
-
-    bom: Mapped[BOM] = relationship(back_populates="items")
-
-
-
 
 
 

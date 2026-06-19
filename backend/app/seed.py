@@ -37,8 +37,6 @@ DEFAULT_PERMISSIONS = [
     ("tasks.report", "View Staff Report", "staff-management", "Staff Management", 103),
     ("vendors.view", "View Vendors", "purchase", "Purchase", 110),
     ("vendors.manage", "Manage Vendors", "purchase", "Purchase", 111),
-    ("orders.view", "View Orders", "orders", "Orders", 120),
-    ("orders.manage", "Manage Orders", "orders", "Orders", 121),
 ]
 
 DEFAULT_PROPERTIES = [

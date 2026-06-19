@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Plus, Pencil, Trash2, X, Save, Calendar, Globe, Mail, Phone, MapPin, Tag, Building, History } from "lucide-react";
+import { Plus, Pencil, Trash2, X, Save, Calendar, Globe, Mail, Phone, MapPin, Tag, Building, History, Download } from "lucide-react";
 import { api } from "../api";
 import { useNotify } from "../components/NotificationProvider";
 import { useAuth } from "../context/AuthContext";
@@ -547,6 +547,55 @@ export function VendorsPage() {
     }
   };
 
+  const handleExportCSV = () => {
+    if (!filteredVendors || filteredVendors.length === 0) {
+      notify("No vendor details to export", "warning");
+      return;
+    }
+
+    const headers = [
+      "Company Name",
+      "Vendor Name",
+      "Products",
+      "Contact Numbers",
+      "Email ID",
+      "City",
+      "Notes",
+      "Website",
+      "Quotation Updated Date",
+      "Added By"
+    ];
+
+    const rows = filteredVendors.map(v => [
+      v.company_name || "",
+      v.vendor_name || "",
+      (v.products || []).join(", "),
+      (v.contact_numbers || []).join(", "),
+      v.email_id || "",
+      v.city || "",
+      (v.notes || []).join(", "),
+      v.website || "",
+      v.quotation_updated_date || "",
+      v.creator_name || ""
+    ]);
+
+    const csvContent = "\uFEFF" + [ // Added BOM for Excel UTF-8 support
+      headers.map(h => `"${h.replace(/"/g, '""')}"`).join(","),
+      ...rows.map(row => row.map(val => `"${String(val).replace(/"/g, '""')}"`).join(","))
+    ].join("\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `vendors_export_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    notify("Vendor details exported successfully", "success");
+  };
+
   return (
     <div className="stack">
       <div className="toolbar split-toolbar">
@@ -556,13 +605,16 @@ export function VendorsPage() {
           value={q}
           onChange={(e) => setQ(e.target.value)}
         />
-        {canManage && (
-          <div className="row-actions">
+        <div className="row-actions">
+          <button type="button" className="icon-button secondary" onClick={handleExportCSV}>
+            <Download size={16} /> Export CSV
+          </button>
+          {canManage && (
             <button type="button" className="icon-button compact-primary" onClick={handleOpenAdd}>
               <Plus size={16} /> Add Vendor
             </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <div className="data-grid">

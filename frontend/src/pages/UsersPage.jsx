@@ -237,7 +237,7 @@ function exportRows(rows) {
 
 export function UsersPage() {
   const notify = useNotify();
-  const users = useLoad(() => api.users());
+  const users = useLoad(() => api.users({ include_inactive: true }));
   const roles = useLoad(() => api.roles());
   const rawUsers = users.data || [];
   const enriched = useMemo(() => {

@@ -73,6 +73,10 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
   const users = useLoad(() => api.users(), []);
   const properties = useLoad(() => api.properties(), []);
   const propertyGrids = useLoad(() => api.propertyGrids(), []);
+  const companiesList = useMemo(
+    () => Array.isArray(companies.data) ? companies.data : (companies.data?.companies || []),
+    [companies.data]
+  );
 
   // UI States
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
@@ -273,13 +277,13 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
   };
 
   const assignedToOptions = useMemo(
-    () => uniqueSorted((companies.data || []).map((company) => getAssignedToName(company))),
-    [companies.data, users.data]
+    () => uniqueSorted(companiesList.map((company) => getAssignedToName(company))),
+    [companiesList, users.data]
   );
 
   const assignedByOptions = useMemo(
-    () => uniqueSorted((companies.data || []).map((company) => company.assigned_by_name || "System")),
-    [companies.data]
+    () => uniqueSorted(companiesList.map((company) => company.assigned_by_name || "System")),
+    [companiesList]
   );
   const cityProperty = useMemo(
     () => gridProperties.find((property) => property.field_key === "city" || property.name?.toLowerCase() === "city"),
@@ -287,14 +291,14 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
   );
   const cityOptions = useMemo(() => {
     if (!cityProperty) return [];
-    return uniqueSorted((companies.data || [])
+    return uniqueSorted(companiesList
       .map((company) => getVal(company, cityProperty))
       .flatMap((value) => String(value || "").split(",").map((item) => item.trim()))
       .filter(Boolean));
-  }, [companies.data, cityProperty]);
+  }, [companiesList, cityProperty]);
 
   const filteredData = useMemo(() => {
-    let data = companies.data || [];
+    let data = companiesList;
 
     data = data.filter((company) =>
       gridProperties.every((property) => {
@@ -323,7 +327,7 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
     }
 
     return data;
-  }, [companies.data, columnFilters, sort, properties.data, users.data, gridProperties]);
+  }, [companiesList, columnFilters, sort, properties.data, users.data, gridProperties]);
 
   const totalPages = Math.ceil(filteredData.length / pageSize);
   const visibleData = filteredData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
@@ -402,7 +406,7 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
       </div>
 
       <div className="data-grid">
-        {!companies.data.length ? (
+        {!companiesList.length ? (
           <div className="muted">No leads found</div>
         ) : (
           <>
@@ -442,7 +446,7 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
                   <tr className="filter-row">
                     {bulkMode && <th className="bulk-select-col" />}
                     {gridProperties.map((p) => {
-                      const dataValues = companies.data.map(c => getVal(c, p))
+                      const dataValues = companiesList.map(c => getVal(c, p))
                         .flatMap(v => String(v).split(",").map(s => s.trim()))
                         .filter(Boolean);
                       const optionMap = new Map(propertyOptions(p).map((option) => [String(option.value), option.label]));

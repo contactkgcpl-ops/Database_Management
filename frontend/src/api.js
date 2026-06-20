@@ -105,7 +105,12 @@ export const api = {
   login: (email, password) => request("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }),
   me: () => request("/auth/me"),
   dashboardStats: () => request("/dashboard/stats"),
-  users: () => request("/users"),
+  users: (params = {}) => {
+    const q = new URLSearchParams(
+      Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== false && v !== "")
+    ).toString();
+    return request(`/users${q ? `?${q}` : ""}`);
+  },
   createUser: (data) => request("/users", { method: "POST", body: requestBody(data) }),
   updateUser: (id, data) => request(`/users/${id}`, { method: "PUT", body: requestBody(data) }),
   deleteUser: (id) => request(`/users/${id}`, { method: "DELETE" }),

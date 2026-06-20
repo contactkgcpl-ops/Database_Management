@@ -1,30 +1,18 @@
 from pathlib import Path
 from uuid import uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, UploadFile
 from pydantic import EmailStr, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.deps import require_any_permission, require_permission
+from app.deps import current_user, require_permission, user_permission_codes
 from app.models import User
 from app.modules.auth.router import serialize_user
 from app.schemas import UserOut
 from app.security import hash_password
 
 router = APIRouter(prefix="/users", tags=["users"])
-
-USER_LIST_PERMISSIONS = [
-    "users.manage",
-    "companies.view",
-    "companies.manage",
-    "leads.assign",
-    "leads.my",
-    "leads.followup",
-    "time.manage",
-    "inquiry.view",
-    "requirement.view",
-]
 
 UPLOAD_DIR = Path("storage/uploads")
 MAX_IMAGE_BYTES = 2 * 1024 * 1024
@@ -151,18 +139,19 @@ def remove_profile_image(image_url: str | None) -> None:
 
 
 @router.get("", response_model=list[UserOut])
-def list_users(db: Session = Depends(get_db), current_user: User = Depends(require_any_permission(USER_LIST_PERMISSIONS))):
-    from app.modules.tasks.services import get_descendant_ids, get_ancestor_ids
-    
-    is_admin = current_user.role.name == "Admin" if current_user.role else False
-    if is_admin:
-        users = db.query(User).order_by(User.id.desc()).all()
+def list_users(
+    include_inactive: bool = Query(False),
+    db: Session = Depends(get_db),
+    requesting_user: User = Depends(current_user),
+):
+    query = db.query(User)
+    if include_inactive:
+        if "users.manage" not in user_permission_codes(requesting_user):
+            raise HTTPException(status_code=403, detail="Missing permission: users.manage")
     else:
-        descendants = get_descendant_ids(db, current_user.id)
-        ancestors = get_ancestor_ids(db, current_user.id)
-        related_ids = descendants.union(ancestors)
-        users = db.query(User).filter(User.id.in_(related_ids)).order_by(User.id.desc()).all()
-        
+        query = query.filter(User.is_active.is_(True))
+
+    users = query.order_by(User.name.asc(), User.id.asc()).all()
     return [serialize_user(user) for user in users]
 
 

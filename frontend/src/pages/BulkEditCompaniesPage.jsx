@@ -88,8 +88,12 @@ const buildCompanyPayload = (row, mapping, activeProperties) => {
 export function BulkEditCompaniesPage({ onBack }) {
     const notify = useNotify();
     const properties = useLoad(() => api.properties(), []);
-    const companies = useLoad(() => api.companies(), []);
+    const companies = useLoad(() => api.companies({ page_size: 100000 }), []);
     const activeProperties = useMemo(() => properties.data.filter(p => p.is_active), [properties.data]);
+    const companiesList = useMemo(
+        () => Array.isArray(companies.data) ? companies.data : (companies.data?.companies || []),
+        [companies.data]
+    );
 
     const [step, setStep] = useState(0); // 0: Upload, 1: Mapping, 2: Preview
     const [csvData, setCsvData] = useState({ headers: [], rows: [] });
@@ -177,13 +181,13 @@ export function BulkEditCompaniesPage({ onBack }) {
 
             // 1. Match by ID
             if (payload.id) {
-                const match = companies.data.find(c => Number(c.id) === Number(payload.id));
+                const match = companiesList.find(c => Number(c.id) === Number(payload.id));
                 if (match) return match;
             }
 
             // 2. Match by Company Name
             if (payload.company_name) {
-                const match = companies.data.find(c => normalizeCompanyName(c.company_name) === normalizeCompanyName(payload.company_name));
+                const match = companiesList.find(c => normalizeCompanyName(c.company_name) === normalizeCompanyName(payload.company_name));
                 if (match) return match;
             }
 
@@ -196,7 +200,7 @@ export function BulkEditCompaniesPage({ onBack }) {
                 const prop = activeProperties.find(p => p.field_key === fieldKey);
                 const isUnique = prop?.is_unique || ["email_id", "contact_number"].includes(fieldKey);
                 if (isUnique) {
-                    const match = companies.data.find(c => {
+                    const match = companiesList.find(c => {
                         return c.property_values?.some(pv => {
                             if (pv.field_key !== fieldKey && pv.property_id !== prop?.id) return false;
                             const vals = (pv.value || "").split(",").map(v => v.trim().toLowerCase());
@@ -304,7 +308,7 @@ export function BulkEditCompaniesPage({ onBack }) {
                 }
 
                 // 2. Check duplicates in the database cache
-                const duplicateInDb = companies.data.some(c => {
+                const duplicateInDb = companiesList.some(c => {
                     if (matchedCompany && c.id === matchedCompany.id) return false;
 
                     if (fieldKey === "company_name") {
@@ -673,7 +677,7 @@ export function BulkEditCompaniesPage({ onBack }) {
                                                          }).length;
                                                          const isCsvDuplicate = csvDupCount > 1;
 
-                                                         const isDbDuplicate = companies.data.some(c => {
+                                                         const isDbDuplicate = companiesList.some(c => {
                                                              if (matchedCompany && c.id === matchedCompany.id) return false;
                                                              if (fieldKey === "company_name") return inputVals.includes(c.company_name?.toLowerCase());
                                                              return c.property_values?.some(pv => {
@@ -860,7 +864,7 @@ export function BulkEditCompaniesPage({ onBack }) {
                                                          }).length;
                                                          const isCsvDuplicate = csvDupCount > 1;
 
-                                                         const isDbDuplicate = companies.data.some(c => {
+                                                         const isDbDuplicate = companiesList.some(c => {
                                                              if (matchedCompany && c.id === matchedCompany.id) return false;
                                                              if (fieldKey === "company_name") return inputVals.includes(c.company_name?.toLowerCase());
                                                              return c.property_values?.some(pv => {

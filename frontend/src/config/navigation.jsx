@@ -13,7 +13,7 @@ export const navigation = [
   },
   {
     key: "contact",
-    label: "Contact",
+    label: "Data collection",
     icon: Users,
     children: [
       { key: "show-companies", label: "Show Companies", icon: Building2, page: "companies", permission: "companies.view" },
@@ -23,11 +23,11 @@ export const navigation = [
   },
   {
     key: "marketing",
-    label: "Marketing",
+    label: "connection",
     icon: Users,
     children: [
-      { key: "my-leads", label: "My Leads", icon: Users, page: "my-leads", permission: "leads.my" },
-      { key: "today-followup", label: "Follow up", icon: Building2, page: "today-followup", permission: "leads.followup" },
+      { key: "my-leads", label: "datas", icon: Users, page: "my-leads", permission: "leads.my" },
+      { key: "today-followup", label: "my lead", icon: Building2, page: "today-followup", permission: "leads.followup" },
     ],
   },
   {

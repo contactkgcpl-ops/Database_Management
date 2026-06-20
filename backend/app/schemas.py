@@ -205,6 +205,7 @@ class CompanyOut(CompanyBase):
 class PaginatedCompaniesOut(BaseModel):
     companies: list[CompanyOut]
     total: int
+    filter_options: dict[str, list[str]] = Field(default_factory=dict)
 
 
 class LeadPropertyValueOut(BaseModel):

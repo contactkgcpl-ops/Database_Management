@@ -653,7 +653,7 @@ export function MyLeadsPage({ setPage, setEditingId }) {
         <div className="modal-backdrop" style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "grid", placeItems: "center", zIndex: 1000 }}>
           <div className="modal column-modal" style={{ maxWidth: "880px", width: "95%", backgroundColor: "#fff", borderRadius: "4px", overflow: "hidden" }}>
             <div className="modal-head" style={{ backgroundColor: "#176b5b", color: "#fff", padding: "10px 20px", display: "flex", justifyContent: "space-between" }}>
-              <h2 style={{ fontSize: "14px" }}>Choose Columns (My Leads)</h2>
+              <h2 style={{ fontSize: "14px" }}>Choose Columns (datas)</h2>
               <button onClick={() => setColumnChooserOpen(false)} style={{ background: "transparent", color: "#fff", border: "none", cursor: "pointer" }}><X size={18} /></button>
             </div>
             <div className="column-chooser-container" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", height: "min(480px, calc(100vh - 170px))", minHeight: 0 }}>

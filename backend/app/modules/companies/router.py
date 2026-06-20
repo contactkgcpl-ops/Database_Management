@@ -16,6 +16,7 @@ from app.modules.companies.services import (
     update_company,
     assign_company,
     import_upsert_company,
+    list_company_filter_options,
 )
 from app.schemas import CompanyCreate, CompanyOut, CompanyUpdate, CompanyImportUpsert, PaginatedCompaniesOut
 
@@ -52,6 +53,7 @@ def list_company_records(
     return {
         "companies": [to_company_out(db, company) for company in companies],
         "total": total_count,
+        "filter_options": list_company_filter_options(db),
     }
 
 

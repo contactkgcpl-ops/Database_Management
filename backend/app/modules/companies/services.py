@@ -136,6 +136,42 @@ def list_companies(
     
     return query.all(), total_count
 
+
+def list_company_filter_options(db: Session, q: str | None = None) -> dict[str, list[str]]:
+    companies, _ = list_companies(db, page=1, page_size=100000, q=q)
+    options: dict[str, set[str]] = {
+        "company_name": set(),
+        "created_by_name": set(),
+    }
+
+    for company in companies:
+        if company.company_name:
+            options["company_name"].add(company.company_name)
+        if company.creator and company.creator.name:
+            options["created_by_name"].add(company.creator.name)
+
+        company_out = to_company_out(db, company)
+        for value in company_out.property_values:
+            if isinstance(value, dict):
+                field_key = value.get("field_key")
+                val_str = value.get("value")
+            else:
+                field_key = getattr(value, "field_key", None)
+                val_str = getattr(value, "value", None)
+
+            if not field_key or not val_str:
+                continue
+            field_options = options.setdefault(field_key, set())
+            for item in str(val_str).split(","):
+                item = item.strip()
+                if item:
+                    field_options.add(item)
+
+    return {
+        key: sorted(values, key=lambda item: item.lower())
+        for key, values in options.items()
+    }
+
 def clean_mobile_value(val: str) -> str:
     if not val:
         return ""

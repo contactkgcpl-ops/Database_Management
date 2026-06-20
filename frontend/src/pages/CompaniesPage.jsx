@@ -160,6 +160,7 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
 
   const companiesList = Array.isArray(companies.data) ? companies.data : (companies.data?.companies || []);
   const companiesTotal = Array.isArray(companies.data) ? companies.data.length : (companies.data?.total || 0);
+  const companyFilterOptions = Array.isArray(companies.data) ? {} : (companies.data?.filter_options || {});
 
   const filteredCompanies = companiesList;
   const sortedCompanies = companiesList;
@@ -274,7 +275,11 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
       </div>
 
       <div className="data-grid">
-        {!companiesList.length ? (
+        {companies.loading ? (
+          <div className="muted">Loading companies...</div>
+        ) : companies.error ? (
+          <div className="muted">Failed to load companies: {companies.error}</div>
+        ) : !companiesList.length ? (
           <div className="muted">No companies found</div>
         ) : (
           <>
@@ -309,7 +314,7 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
                     {gridProperties.map((p) => {
                       const filterVal = columnFilters[p.field_key] || "";
 
-                      const dataValues = companiesList.map(c => getCompanyPropertyValue(c, p))
+                      const dataValues = (companyFilterOptions[p.field_key] || companiesList.map(c => getCompanyPropertyValue(c, p)))
                         .flatMap(v => String(v).split(",").map(s => s.trim()))
                         .filter(Boolean);
                       const optionMap = new Map(propertyOptions(p).map((option) => [String(option.value), option.label]));

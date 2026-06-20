@@ -120,7 +120,15 @@ export const api = {
   updateProperty: (id, data) => request(`/properties/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   updatePropertyGridColumns: (columns) => request("/properties/grid-columns", { method: "PUT", body: JSON.stringify({ columns }) }),
   deleteProperty: (id) => request(`/properties/${id}`, { method: "DELETE" }),
-  companies: (q = "") => request(`/companies${q ? `?q=${encodeURIComponent(q)}` : ""}`),
+  companies: (params = {}) => {
+    if (typeof params === "string") {
+      return request(`/companies${params ? `?q=${encodeURIComponent(params)}` : ""}`);
+    }
+    const q = new URLSearchParams(
+      Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== "")
+    ).toString();
+    return request(`/companies${q ? `?${q}` : ""}`);
+  },
   company: (id) => request(`/companies/${id}`),
   importCompanies: (rows) => Promise.all(rows.map((row) => request("/companies", { method: "POST", body: JSON.stringify(row) }))),
   createCompany: (data) => request("/companies", { method: "POST", body: JSON.stringify(data) }),

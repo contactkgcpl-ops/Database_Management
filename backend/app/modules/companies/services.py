@@ -1,5 +1,5 @@
 import re
-from sqlalchemy import or_, text, inspect
+from sqlalchemy import or_, and_, text, inspect
 from sqlalchemy.orm import Session, joinedload
 
 from app.models import Company, CompanyPropertyValue, Property, User, LeadManage
@@ -17,15 +17,163 @@ def company_query(db: Session):
         joinedload(Company.lead_assignments).joinedload(LeadManage.assigned_by),
     )
 
-def list_companies(db: Session, q: str | None = None) -> list[Company]:
-    from app.models import LeadManage
+def list_companies(
+    db: Session,
+    page: int = 1,
+    page_size: int = 25,
+    q: str | None = None,
+    sort_key: str | None = None,
+    sort_dir: str | None = None,
+    filters: dict | None = None,
+) -> tuple[list[Company], int]:
+    from app.models import LeadManage, CompanyPropertyValue, Property, User
+    
     query = company_query(db).outerjoin(LeadManage, Company.id == LeadManage.company_id).filter(
         or_(LeadManage.is_inquiry.is_(False), LeadManage.is_inquiry.is_(None))
-    ).order_by(Company.id.desc())
+    )
+    
+    # 1. Search Query (q) on company_name
     if q:
         term = f"%{q.strip()}%"
         query = query.filter(Company.company_name.ilike(term))
-    return query.all()
+        
+    # 2. Dynamic/Static Column Filters (filters)
+    if filters:
+        all_props = db.query(Property).filter(Property.is_active == True).all()
+        prop_map = {p.field_key: p for p in all_props}
+        
+        sql_params = {}
+        param_counter = 0
+        
+        for key, val in filters.items():
+            if val is None or val == "" or (isinstance(val, list) and len(val) == 0):
+                continue
+                
+            if key == "company_name":
+                query = query.filter(Company.company_name.ilike(f"%{val}%"))
+            elif key == "created_by_name":
+                query = query.join(Company.creator).filter(User.name.ilike(f"%{val}%"))
+            elif key in prop_map:
+                prop = prop_map[key]
+                param_name = f"filter_val_{param_counter}"
+                param_counter += 1
+                
+                if prop.is_multi_value:
+                    # Multi-value property (stored in company_property_values)
+                    if isinstance(val, list):
+                        query = query.filter(
+                            Company.property_values.any(
+                                and_(
+                                    CompanyPropertyValue.property_id == prop.id,
+                                    CompanyPropertyValue.value.in_(val)
+                                )
+                            )
+                        )
+                    else:
+                        query = query.filter(
+                            Company.property_values.any(
+                                and_(
+                                    CompanyPropertyValue.property_id == prop.id,
+                                    CompanyPropertyValue.value.ilike(f"%{val}%")
+                                )
+                            )
+                        )
+                else:
+                    # Single-value property (stored as dynamic column on companies or lead_manage)
+                    if prop.entity_type == "company":
+                        if isinstance(val, list):
+                            # Multiselect filter
+                            placeholders = ", ".join(f":{param_name}_{i}" for i in range(len(val)))
+                            query = query.filter(text(f"companies.{prop.field_key} IN ({placeholders})"))
+                            for i, v in enumerate(val):
+                                sql_params[f"{param_name}_{i}"] = v
+                        else:
+                            query = query.filter(text(f"LOWER(companies.{prop.field_key}) LIKE :{param_name}"))
+                            sql_params[param_name] = f"%{str(val).lower()}%"
+                    elif prop.entity_type == "lead":
+                        if isinstance(val, list):
+                            placeholders = ", ".join(f":{param_name}_{i}" for i in range(len(val)))
+                            query = query.filter(text(f"lead_manage.{prop.field_key} IN ({placeholders})"))
+                            for i, v in enumerate(val):
+                                sql_params[f"{param_name}_{i}"] = v
+                        else:
+                            query = query.filter(text(f"LOWER(lead_manage.{prop.field_key}) LIKE :{param_name}"))
+                            sql_params[param_name] = f"%{str(val).lower()}%"
+                            
+        if sql_params:
+            query = query.params(**sql_params)
+
+    # 3. Total Count before pagination
+    total_count = db.query(query.subquery()).count()
+    
+    # 4. Sorting
+    direction = "ASC"
+    if sort_dir and str(sort_dir).lower() == "desc":
+        direction = "DESC"
+        
+    if sort_key:
+        if sort_key == "company_name":
+            query = query.order_by(Company.company_name.desc() if direction == "DESC" else Company.company_name.asc())
+        elif sort_key == "created_by_name":
+            query = query.join(Company.creator).order_by(User.name.desc() if direction == "DESC" else User.name.asc())
+        else:
+            all_props = db.query(Property).filter(Property.is_active == True).all()
+            prop_map = {p.field_key: p for p in all_props}
+            if sort_key in prop_map:
+                prop = prop_map[sort_key]
+                if not prop.is_multi_value:
+                    if prop.entity_type == "company":
+                        query = query.order_by(text(f"companies.{prop.field_key} {direction}"))
+                    elif prop.entity_type == "lead":
+                        query = query.order_by(text(f"lead_manage.{prop.field_key} {direction}"))
+            else:
+                query = query.order_by(Company.id.desc())
+    else:
+        query = query.order_by(Company.id.desc())
+        
+    # 5. Pagination (Limit/Offset)
+    query = query.offset((page - 1) * page_size).limit(page_size)
+    
+    return query.all(), total_count
+
+def clean_mobile_value(val: str) -> str:
+    if not val:
+        return ""
+    
+    cleaned_parts = []
+    for part in val.split(","):
+        digits = "".join(c for c in part if c.isdigit())
+        if not digits:
+            continue
+        
+        # Remove country code prefixes (India/general 91 or 0 prefixes)
+        if len(digits) == 11 and digits.startswith("0"):
+            digits = digits[1:]
+        elif len(digits) == 12 and digits.startswith("91"):
+            digits = digits[2:]
+        elif len(digits) == 13 and digits.startswith("091"):
+            digits = digits[3:]
+            
+        cleaned_parts.append(digits)
+        
+    unique_parts = []
+    for p in cleaned_parts:
+        if p not in unique_parts:
+            unique_parts.append(p)
+            
+    return ",".join(unique_parts)
+
+def clean_payload_mobile_numbers(db: Session, payload) -> None:
+    mobile_props = db.query(Property).filter(Property.object_type == "mobile", Property.is_active == True).all()
+    mobile_prop_ids = {p.id for p in mobile_props}
+    
+    if not mobile_prop_ids:
+        return
+        
+    for pv in payload.property_values:
+        if pv.property_id in mobile_prop_ids:
+            if pv.value:
+                pv.value = clean_mobile_value(pv.value)
 
 def get_company(db: Session, company_id: int) -> Company | None:
     return company_query(db).filter(Company.id == company_id).first()
@@ -87,6 +235,7 @@ def apply_company_payload(db: Session, company: Company, payload: CompanyCreate 
     return dynamic_data, lead_dynamic_data
 
 def create_company(db: Session, payload: CompanyCreate, user: User) -> Company:
+    clean_payload_mobile_numbers(db, payload)
     validate_unique_properties(db, payload)
     company = Company(created_by=user.id)
     dynamic_data, lead_dynamic_data = apply_company_payload(db, company, payload)
@@ -106,6 +255,7 @@ def create_company(db: Session, payload: CompanyCreate, user: User) -> Company:
     return get_company(db, company.id) or company
 
 def update_company(db: Session, company: Company, payload: CompanyUpdate) -> Company:
+    clean_payload_mobile_numbers(db, payload)
     validate_unique_properties(db, payload, exclude_company_id=company.id)
     dynamic_data, lead_dynamic_data = apply_company_payload(db, company, payload)
     
@@ -349,6 +499,30 @@ def update_property_inline(db: Session, company_id: int, payload: InlineProperty
         old_value = str(raw_row.get(prop.field_key)) if raw_row and raw_row.get(prop.field_key) is not None else ""
         
     new_val = payload.value.strip()
+    if prop.object_type == "mobile":
+        new_val = clean_mobile_value(new_val)
+        if prop.is_unique and new_val:
+            if prop.is_multi_value:
+                parts = [v.strip() for v in new_val.split(",") if v.strip()]
+                for v in parts:
+                    query = db.query(CompanyPropertyValue.id).filter(
+                        CompanyPropertyValue.property_id == prop.id,
+                        CompanyPropertyValue.value == v,
+                        CompanyPropertyValue.company_id != company_id
+                    )
+                    if db.query(query.exists()).scalar():
+                        raise ValueError(f"{prop.name} '{v}' already exists")
+            else:
+                if prop.entity_type == "lead":
+                    query = db.query(LeadManage.id).filter(
+                        text(f"lead_manage.{prop.field_key} = :val AND lead_manage.company_id != :cid")
+                    ).params(val=new_val, cid=company_id)
+                else:
+                    query = db.query(Company.id).filter(
+                        text(f"companies.{prop.field_key} = :val AND companies.id != :cid")
+                    ).params(val=new_val, cid=company_id)
+                if db.query(query.exists()).scalar():
+                    raise ValueError(f"{prop.name} '{new_val}' already exists")
     
     if prop.entity_type == "lead":
         db.execute(text(f"UPDATE lead_manage SET {prop.field_key} = :val WHERE company_id = :cid"), {"val": new_val, "cid": company.id})
@@ -441,6 +615,7 @@ def normalize_company_name(name: str) -> str:
 
 
 def import_upsert_company(db: Session, payload: CompanyImportUpsert, user: User) -> Company:
+    clean_payload_mobile_numbers(db, payload)
     all_companies = db.query(Company).all()
     normalized_input = normalize_company_name(payload.company_name)
     company = next((c for c in all_companies if normalize_company_name(c.company_name) == normalized_input), None)

@@ -1,3 +1,4 @@
+import json
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -16,19 +17,42 @@ from app.modules.companies.services import (
     assign_company,
     import_upsert_company,
 )
-from app.schemas import CompanyCreate, CompanyOut, CompanyUpdate, CompanyImportUpsert
+from app.schemas import CompanyCreate, CompanyOut, CompanyUpdate, CompanyImportUpsert, PaginatedCompaniesOut
 
 router = APIRouter(prefix="/companies", tags=["companies"])
 
 
-@router.get("", response_model=list[CompanyOut])
+@router.get("", response_model=PaginatedCompaniesOut)
 def list_company_records(
+    page: int = 1,
+    page_size: int = 25,
     q: str | None = None,
+    sort_key: str | None = None,
+    sort_dir: str | None = None,
+    filters: str | None = None,
     db: Session = Depends(get_db),
     _: User = Depends(require_permission("companies.view")),
 ):
-    companies = list_companies(db, q)
-    return [to_company_out(db, company) for company in companies]
+    parsed_filters = None
+    if filters:
+        try:
+            parsed_filters = json.loads(filters)
+        except Exception:
+            pass
+
+    companies, total_count = list_companies(
+        db,
+        page=page,
+        page_size=page_size,
+        q=q,
+        sort_key=sort_key,
+        sort_dir=sort_dir,
+        filters=parsed_filters,
+    )
+    return {
+        "companies": [to_company_out(db, company) for company in companies],
+        "total": total_count,
+    }
 
 
 @router.get("/my", response_model=list[CompanyOut])

@@ -19,8 +19,6 @@ export function writeColumnKeys(storageKey, keys) {
 export function orderedVisibleColumns(availableColumns, selectedKeys) {
   if (!Array.isArray(selectedKeys)) return availableColumns;
   const byKey = new Map(availableColumns.map((column) => [column.field_key, column]));
-  const selected = selectedKeys.map((key) => byKey.get(key)).filter(Boolean);
-  const missingDynamicColumns = availableColumns.filter((column) => column.id > 0 && !selectedKeys.includes(column.field_key));
-  return [...selected, ...missingDynamicColumns];
+  return selectedKeys.map((key) => byKey.get(key)).filter(Boolean);
 }
 

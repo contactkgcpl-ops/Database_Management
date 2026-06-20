@@ -202,6 +202,11 @@ class CompanyOut(CompanyBase):
     is_inquiry: bool | None = False
 
 
+class PaginatedCompaniesOut(BaseModel):
+    companies: list[CompanyOut]
+    total: int
+
+
 class LeadPropertyValueOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
     id: int

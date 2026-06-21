@@ -37,6 +37,11 @@ DEFAULT_PERMISSIONS = [
     ("tasks.report", "View Staff Report", "staff-management", "Staff Management", 103),
     ("vendors.view", "View Vendors", "purchase", "Purchase", 110),
     ("vendors.manage", "Manage Vendors", "purchase", "Purchase", 111),
+    ("leave.view", "View Leave Dashboard", "leave-management", "Leave Management", 120),
+    ("leave.apply", "Apply for Leave", "leave-management", "Leave Management", 121),
+    ("leave.approve", "Approve Leaves", "leave-management", "Leave Management", 122),
+    ("leave.manage", "Manage Leaves", "leave-management", "Leave Management", 123),
+    ("leave.calendar", "View Leave Calendar", "leave-management", "Leave Management", 124),
 ]
 
 DEFAULT_PROPERTIES = [

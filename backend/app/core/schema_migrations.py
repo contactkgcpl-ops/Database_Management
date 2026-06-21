@@ -586,4 +586,28 @@ def migrate_all(db: Session) -> None:
     consolidate_product_to_requirement(db)
     migrate_vendors_schema(db)
     migrate_hourly_reports_calling_schema(db)
+    migrate_leave_requests_half_days(db)
+
+def migrate_leave_requests_half_days(db: Session) -> None:
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    if "leave_requests" not in tables:
+        return
+    columns = {column["name"] for column in inspector.get_columns("leave_requests")}
+    dialect = engine.dialect.name
+    if "start_half_day" not in columns:
+        if dialect == "mysql":
+            db.execute(text("ALTER TABLE leave_requests ADD COLUMN start_half_day BOOL NOT NULL DEFAULT 0"))
+        else:
+            db.execute(text("ALTER TABLE leave_requests ADD COLUMN start_half_day BOOLEAN NOT NULL DEFAULT 0"))
+    if "end_half_day" not in columns:
+        if dialect == "mysql":
+            db.execute(text("ALTER TABLE leave_requests ADD COLUMN end_half_day BOOL NOT NULL DEFAULT 0"))
+        else:
+            db.execute(text("ALTER TABLE leave_requests ADD COLUMN end_half_day BOOLEAN NOT NULL DEFAULT 0"))
+    if "half_day_details" not in columns:
+        db.execute(text("ALTER TABLE leave_requests ADD COLUMN half_day_details TEXT"))
+    if "cancel_reason" not in columns:
+        db.execute(text("ALTER TABLE leave_requests ADD COLUMN cancel_reason TEXT"))
+    db.commit()
 

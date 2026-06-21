@@ -15,8 +15,9 @@ from app.modules.time_tracking.services import (
     start_break,
     start_day_log,
     to_time_log_out,
+    get_attendance_report,
 )
-from app.schemas import UserTimeLogOut
+from app.schemas import UserTimeLogOut, AttendanceReportResponse
 
 router = APIRouter(prefix="/time", tags=["time"])
 
@@ -49,6 +50,23 @@ def user_time_logs(
     _: User = Depends(require_permission("time.manage")),
 ):
     return [to_time_log_out(log) for log in list_user_logs(db, start, end, user_id)]
+
+
+@router.get("/attendance-report", response_model=AttendanceReportResponse)
+def attendance_report(
+    start: date | None = None,
+    end: date | None = None,
+    user_id: int | None = None,
+    db: Session = Depends(get_db),
+    _: User = Depends(require_any_permission("time.manage", "leave.manage")),
+):
+    if not start:
+        from datetime import date as dt_date, timedelta
+        start = dt_date.today() - timedelta(days=30)
+    if not end:
+        from datetime import date as dt_date
+        end = dt_date.today()
+    return get_attendance_report(db, start, end, user_id)
 
 
 @router.post("/login", response_model=UserTimeLogOut)

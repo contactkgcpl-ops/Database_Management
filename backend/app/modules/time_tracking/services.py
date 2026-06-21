@@ -1,9 +1,15 @@
-from datetime import date, datetime, timezone
+from datetime import date, datetime, timezone, timedelta
 
 from sqlalchemy.orm import Session, joinedload
 
-from app.models import User, UserBreakLog, UserTimeLog
-from app.schemas import UserBreakLogOut, UserTimeLogOut
+from app.models import User, UserBreakLog, UserTimeLog, LeaveRequest
+from app.schemas import (
+    UserBreakLogOut,
+    UserTimeLogOut,
+    AttendanceReportItem,
+    AttendanceSummaryItem,
+    AttendanceReportResponse,
+)
 
 
 def today() -> date:
@@ -216,3 +222,137 @@ def to_time_log_out(log: UserTimeLog) -> UserTimeLogOut:
         breaks=breaks,
         server_time=add_utc_tz(current_time),
     )
+
+
+def get_attendance_report(
+    db: Session,
+    start_date: date,
+    end_date: date,
+    user_id: int | None = None,
+) -> AttendanceReportResponse:
+    # 1. Generate dates list
+    delta = end_date - start_date
+    dates = [start_date + timedelta(days=i) for i in range(delta.days + 1)]
+
+    # 2. Get active users
+    users_query = db.query(User).filter(User.is_active == True)
+    if user_id:
+        users_query = users_query.filter(User.id == user_id)
+    users = users_query.order_by(User.name).all()
+
+    # 3. Fetch Time Logs
+    logs_query = db.query(UserTimeLog).filter(
+        UserTimeLog.work_date >= start_date,
+        UserTimeLog.work_date <= end_date
+    )
+    if user_id:
+        logs_query = logs_query.filter(UserTimeLog.user_id == user_id)
+    time_logs = logs_query.all()
+    logs_map = {(log.user_id, log.work_date): log for log in time_logs}
+
+    # 4. Fetch Leave Requests
+    leaves_query = db.query(LeaveRequest).filter(
+        LeaveRequest.status == "Approved",
+        LeaveRequest.from_date <= end_date,
+        LeaveRequest.to_date >= start_date
+    )
+    if user_id:
+        leaves_query = leaves_query.filter(LeaveRequest.user_id == user_id)
+    leave_requests = leaves_query.all()
+
+    leaves_map = {}
+    for req in leave_requests:
+        leaves_map.setdefault(req.user_id, []).append(req)
+
+    # 5. Process log items
+    logs_out = []
+    summaries_map = {
+        user.id: {
+            "user_id": user.id,
+            "user_name": user.name,
+            "total_days": len(dates),
+            "present_days": 0,
+            "leave_days": 0,
+            "absent_days": 0,
+            "sunday_days": 0,
+            "total_work_hours": 0.0,
+        }
+        for user in users
+    }
+
+    for user in users:
+        user_leaves = leaves_map.get(user.id, [])
+        for date_item in dates:
+            log = logs_map.get((user.id, date_item))
+
+            # Check leave status
+            matching_leave = next(
+                (req for req in user_leaves if req.from_date <= date_item <= req.to_date),
+                None
+            )
+            is_on_leave = matching_leave is not None
+            leave_status = matching_leave.status if matching_leave else None
+            leave_title = matching_leave.title if matching_leave else None
+
+            # Determine status string
+            if date_item.weekday() == 6:  # Sunday
+                status_str = "Sunday"
+            elif log:
+                if is_on_leave:
+                    status_str = "Leave (Worked)"
+                else:
+                    status_str = "Present"
+            else:
+                if is_on_leave:
+                    status_str = "Leave"
+                else:
+                    status_str = "Unavailable"
+
+            # Increment summary stats
+            if user.id in summaries_map:
+                summary = summaries_map[user.id]
+                if status_str in ["Present", "Leave (Worked)"]:
+                    summary["present_days"] += 1
+                elif status_str == "Leave":
+                    summary["leave_days"] += 1
+                elif status_str == "Sunday":
+                    summary["sunday_days"] += 1
+                elif status_str == "Unavailable":
+                    summary["absent_days"] += 1
+
+                work_seconds = log.total_work_seconds if log else 0
+                summary["total_work_hours"] += work_seconds / 3600.0
+
+            work_seconds = log.total_work_seconds if log else 0
+            logs_out.append(
+                AttendanceReportItem(
+                    user_id=user.id,
+                    user_name=user.name,
+                    work_date=date_item.isoformat(),
+                    login_at=add_utc_tz(log.login_at) if log else None,
+                    logout_at=add_utc_tz(log.logout_at) if log else None,
+                    total_work_seconds=work_seconds,
+                    is_on_leave=is_on_leave,
+                    leave_status=leave_status,
+                    leave_title=leave_title,
+                    status=status_str,
+                )
+            )
+
+    # 6. Build summary responses
+    summary_out = []
+    for user in users:
+        if user.id in summaries_map:
+            s = summaries_map[user.id]
+            s["total_work_hours"] = round(s["total_work_hours"], 2)
+            if s["present_days"] > 0:
+                s["average_work_hours"] = round(s["total_work_hours"] / s["present_days"], 2)
+            else:
+                s["average_work_hours"] = 0.0
+            summary_out.append(AttendanceSummaryItem(**s))
+
+    # Sort logs_out: descending by date, then user name
+    logs_out.sort(key=lambda x: (x.work_date, x.user_name), reverse=True)
+
+    return AttendanceReportResponse(logs=logs_out, summary=summary_out)
+

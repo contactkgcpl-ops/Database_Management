@@ -1,4 +1,4 @@
-import { Building2, ClipboardList, Clock, LayoutDashboard, ListTree, Shield, Users, Sparkles, ShoppingCart } from "lucide-react";
+import { Building2, ClipboardList, Clock, LayoutDashboard, ListTree, Shield, Users, Sparkles, ShoppingCart, Calendar } from "lucide-react";
 
 export const navigation = [
   { key: "dashboard", label: "Dashboard", icon: LayoutDashboard, page: "dashboard", permission: "dashboard.view" },
@@ -66,6 +66,16 @@ export const navigation = [
       { key: "tasks", label: "Tasks", icon: ClipboardList, page: "tasks", permission: "tasks.view" },
       { key: "requirements", label: "Requirement", icon: ClipboardList, page: "requirements", permission: "requirement.view" },
       { key: "staff-report", label: "Staff Report", icon: ClipboardList, page: "staff-report", permission: "tasks.report" },
+    ],
+  },
+  {
+    key: "leave-management",
+    label: "Hr & Admin",
+    icon: Calendar,
+    children: [
+      { key: "leave-my", label: "My Leaves", icon: ClipboardList, page: "leave-my", permission: "leave.view", alternatePermission: "leave.apply" },
+      { key: "leave-approvals", label: "Approvals", icon: ClipboardList, page: "leave-approvals", permission: "leave.approve" },
+      { key: "employee-attendance", label: "Employee Attendance", icon: ClipboardList, page: "employee-attendance", permission: "time.manage", alternatePermission: "leave.manage" },
     ],
   },
 ];

@@ -463,6 +463,52 @@ class VendorNote(Base, TimestampMixin):
     vendor: Mapped[Vendor] = relationship(back_populates="notes")
 
 
+class LeaveRequest(Base, TimestampMixin):
+    __tablename__ = "leave_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    title: Mapped[str] = mapped_column(String(180))
+    leave_type: Mapped[str] = mapped_column(String(50))  # Full Day / Half Day
+    half_day_type: Mapped[str | None] = mapped_column(String(50))  # First Half / Second Half
+    from_date: Mapped[date] = mapped_column(Date)
+    to_date: Mapped[date] = mapped_column(Date)
+    total_days: Mapped[float] = mapped_column(Float)
+    description: Mapped[str] = mapped_column(Text)
+    attachment: Mapped[str | None] = mapped_column(Text)  # filename
+    total_approvers: Mapped[int] = mapped_column(Integer, default=0)
+    required_approvals: Mapped[int] = mapped_column(Integer, default=0)
+    approved_count: Mapped[int] = mapped_column(Integer, default=0)
+    rejected_count: Mapped[int] = mapped_column(Integer, default=0)
+    pending_count: Mapped[int] = mapped_column(Integer, default=0)
+    status: Mapped[str] = mapped_column(String(50), default="Pending")  # Pending, Approved, Rejected, Cancelled
+    start_half_day: Mapped[bool] = mapped_column(Boolean, default=False)
+    end_half_day: Mapped[bool] = mapped_column(Boolean, default=False)
+    half_day_details: Mapped[str | None] = mapped_column(Text, nullable=True)
+    cancel_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+    approvals: Mapped[list["LeaveApproval"]] = relationship(cascade="all, delete-orphan", back_populates="leave")
+
+
+class LeaveApproval(Base, TimestampMixin):
+    __tablename__ = "leave_approvals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    leave_id: Mapped[int] = mapped_column(ForeignKey("leave_requests.id", ondelete="CASCADE"), index=True)
+    approver_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    status: Mapped[str] = mapped_column(String(50), default="Pending")  # Pending, Approved, Rejected
+    remark: Mapped[str | None] = mapped_column(Text)
+    action_date: Mapped[datetime | None] = mapped_column(DateTime)
+
+    leave: Mapped[LeaveRequest] = relationship(back_populates="approvals")
+    approver: Mapped["User"] = relationship(foreign_keys=[approver_id])
+
+
+
+
+
+
 
 
 

@@ -504,3 +504,118 @@ class VendorHistoryOut(BaseModel):
     created_at: datetime
 
 
+# --- Leave Management ---
+
+
+class LeaveApprovalOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    leave_id: int
+    approver_id: int
+    approver_name: str | None = None
+    approver_role: str | None = None
+    status: str
+    remark: str | None = None
+    action_date: datetime | None = None
+
+
+class LeaveRequestCreate(BaseModel):
+    title: str = Field(min_length=1, max_length=180)
+    leave_type: str = Field(pattern=r"^(Full Day|Half Day)$")
+    half_day_type: str | None = None  # First Half / Second Half
+    from_date: date
+    to_date: date
+    description: str
+    attachment: str | None = None
+    start_half_day: bool = False
+    end_half_day: bool = False
+    half_day_details: str | None = None
+    user_id: int | None = None
+
+
+
+class LeaveRequestOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int
+    employee_name: str | None = None
+    department: str | None = None
+    designation: str | None = None
+    title: str
+    leave_type: str
+    half_day_type: str | None = None
+    from_date: date
+    to_date: date
+    total_days: float
+    description: str
+    attachment: str | None = None
+    total_approvers: int
+    required_approvals: int
+    approved_count: int
+    rejected_count: int
+    pending_count: int
+    status: str
+    created_at: datetime
+    updated_at: datetime
+    start_half_day: bool
+    end_half_day: bool
+    half_day_details: str | None
+    cancel_reason: str | None = None
+    approvals: list[LeaveApprovalOut] = []
+
+
+class LeaveApproverInfo(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    name: str
+    email: EmailStr
+    role_name: str | None = None
+
+
+
+class LeaveApprovalAction(BaseModel):
+    status: str = Field(pattern=r"^(Approved|Rejected)$")
+    remark: str | None = None
+
+
+class LeaveCalendarItem(BaseModel):
+    id: int | None = None
+    type: str  # leave, holiday, week_off
+    title: str
+    from_date: date
+    to_date: date
+    status: str | None = None  # Pending, Approved
+
+
+class AttendanceReportItem(BaseModel):
+    user_id: int
+    user_name: str
+    work_date: str
+    login_at: datetime | None = None
+    logout_at: datetime | None = None
+    total_work_seconds: int = 0
+    is_on_leave: bool = False
+    leave_status: str | None = None
+    leave_title: str | None = None
+    status: str
+
+
+class AttendanceSummaryItem(BaseModel):
+    user_id: int
+    user_name: str
+    total_days: int = 0
+    present_days: int = 0
+    leave_days: int = 0
+    absent_days: int = 0
+    sunday_days: int = 0
+    total_work_hours: float = 0.0
+    average_work_hours: float = 0.0
+
+
+class AttendanceReportResponse(BaseModel):
+    logs: list[AttendanceReportItem]
+    summary: list[AttendanceSummaryItem]
+
+
+
+

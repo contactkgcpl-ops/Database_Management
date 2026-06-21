@@ -167,6 +167,12 @@ export const api = {
   todayTime: () => request("/time/today"),
   myTimeLogs: (q = "") => request(`/time/my${q ? `?${q}` : ""}`),
   userTimeLogs: (q = "") => request(`/time/users${q ? `?${q}` : ""}`),
+  attendanceReport: (params = {}) => {
+    const q = new URLSearchParams(
+      Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== "")
+    ).toString();
+    return request(`/time/attendance-report${q ? `?${q}` : ""}`);
+  },
   markTimeLogout: () => request("/time/logout", { method: "POST" }),
   timeResume: () => request("/time/resume", { method: "POST" }),
   startBreak: () => request("/time/break/start", { method: "POST" }),
@@ -221,4 +227,16 @@ export const api = {
   deleteVendor: (id) => request(`/vendors/${id}`, { method: "DELETE" }),
   updateVendorInline: (vendorId, payload) => request(`/vendors/${vendorId}/inline-update`, { method: "PUT", body: JSON.stringify(payload) }),
   getVendorHistory: (vendorId) => request(`/vendors/${vendorId}/history`),
+  // Leave Management
+  applyLeave: (data) => request("/leaves/apply", { method: "POST", body: JSON.stringify(data) }),
+  myLeaves: (userId) => request("/leaves/my" + (userId ? `?user_id=${userId}` : "")),
+  leaveApprovals: () => request("/leaves/approvals"),
+  actionLeaveApproval: (leaveId, actionData) => request(`/leaves/${leaveId}/approve`, { method: "POST", body: JSON.stringify(actionData) }),
+  cancelLeave: (leaveId, reason) => request(`/leaves/${leaveId}/cancel?reason=${encodeURIComponent(reason)}`, { method: "POST" }),
+  leaveCalendar: (month, year) => request(`/leaves/calendar?month=${month}&year=${year}`),
+  leaveDetails: (leaveId) => request(`/leaves/${leaveId}`),
+  uploadLeaveAttachment: (formData) => request("/leaves/upload", { method: "POST", body: formData }),
+  updateLeave: (leaveId, data) => request(`/leaves/${leaveId}`, { method: "PUT", body: JSON.stringify(data) }),
+  myApprovers: (userId) => request("/leaves/my-approvers" + (userId ? `?user_id=${userId}` : "")),
+  leaveRequests: () => request("/leaves/requests"),
 };

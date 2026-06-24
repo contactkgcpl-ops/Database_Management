@@ -161,8 +161,10 @@ class CompanyPropertyValueCreate(CompanyPropertyValueBase):
     pass
 
 
-class CompanyPropertyValueOut(CompanyPropertyValueBase):
+class CompanyPropertyValueOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
+    property_id: int
+    value: str | None = None
     id: int
     property_name: str | None = None
     field_key: str | None = None

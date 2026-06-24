@@ -27,10 +27,17 @@ def list_companies(
     filters: dict | None = None,
 ) -> tuple[list[Company], int]:
     from app.models import LeadManage, CompanyPropertyValue, Property, User
+    from sqlalchemy.orm import aliased
+    
+    AssignedUser = aliased(User)
+    AssignedByUser = aliased(User)
     
     query = company_query(db).outerjoin(LeadManage, Company.id == LeadManage.company_id).filter(
         or_(LeadManage.is_inquiry.is_(False), LeadManage.is_inquiry.is_(None))
     )
+    
+    query = query.outerjoin(AssignedUser, LeadManage.assigned_to_id == AssignedUser.id)\
+                 .outerjoin(AssignedByUser, LeadManage.assigned_by_id == AssignedByUser.id)
     
     # 1. Search Query (q) on company_name
     if q:
@@ -53,6 +60,34 @@ def list_companies(
                 query = query.filter(Company.company_name.ilike(f"%{val}%"))
             elif key == "created_by_name":
                 query = query.join(Company.creator).filter(User.name.ilike(f"%{val}%"))
+            elif key == "assigned_to":
+                if isinstance(val, list):
+                    or_conds = []
+                    for v in val:
+                        if v == "Not Assigned":
+                            or_conds.append(LeadManage.assigned_to_id.is_(None))
+                        else:
+                            or_conds.append(AssignedUser.name == v)
+                    query = query.filter(or_(*or_conds))
+                else:
+                    if val == "Not Assigned":
+                        query = query.filter(LeadManage.assigned_to_id.is_(None))
+                    else:
+                        query = query.filter(AssignedUser.name.ilike(f"%{val}%"))
+            elif key == "assigned_by_name":
+                if isinstance(val, list):
+                    or_conds = []
+                    for v in val:
+                        if v == "System":
+                            or_conds.append(LeadManage.assigned_by_id.is_(None))
+                        else:
+                            or_conds.append(AssignedByUser.name == v)
+                    query = query.filter(or_(*or_conds))
+                else:
+                    if val == "System":
+                        query = query.filter(LeadManage.assigned_by_id.is_(None))
+                    else:
+                        query = query.filter(AssignedByUser.name.ilike(f"%{val}%"))
             elif key in prop_map:
                 prop = prop_map[key]
                 param_name = f"filter_val_{param_counter}"
@@ -116,6 +151,10 @@ def list_companies(
             query = query.order_by(Company.company_name.desc() if direction == "DESC" else Company.company_name.asc())
         elif sort_key == "created_by_name":
             query = query.join(Company.creator).order_by(User.name.desc() if direction == "DESC" else User.name.asc())
+        elif sort_key == "assigned_to":
+            query = query.order_by(AssignedUser.name.desc() if direction == "DESC" else AssignedUser.name.asc())
+        elif sort_key == "assigned_by_name":
+            query = query.order_by(AssignedByUser.name.desc() if direction == "DESC" else AssignedByUser.name.asc())
         else:
             all_props = db.query(Property).filter(Property.is_active == True).all()
             prop_map = {p.field_key: p for p in all_props}
@@ -127,7 +166,7 @@ def list_companies(
                     elif prop.entity_type == "lead":
                         query = query.order_by(text(f"lead_manage.{prop.field_key} {direction}"))
             else:
-                query = query.order_by(Company.id.desc())
+                query = query.order_by(Company.id.desc() if direction == "DESC" else Company.id.asc())
     else:
         query = query.order_by(Company.id.desc())
         

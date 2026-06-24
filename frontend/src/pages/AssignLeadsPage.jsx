@@ -69,12 +69,35 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
     }
   };
   const [q, setQ] = useState("");
-  const companies = useLoad(() => api.companies(q), [q]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
+  const [columnFilters, setColumnFilters] = useState({});
+  const [sort, setSort] = useState({ key: "id", direction: "desc" });
+
+  const serializedFilters = JSON.stringify(columnFilters);
+  const companies = useLoad(() => api.companies({
+    page: currentPage,
+    page_size: pageSize,
+    q,
+    sort_key: sort.key,
+    sort_dir: sort.direction,
+    filters: serializedFilters
+  }), [currentPage, pageSize, q, sort.key, sort.direction, serializedFilters]);
+
   const users = useLoad(() => api.users(), []);
   const properties = useLoad(() => api.properties(), []);
   const propertyGrids = useLoad(() => api.propertyGrids(), []);
+  
   const companiesList = useMemo(
     () => Array.isArray(companies.data) ? companies.data : (companies.data?.companies || []),
+    [companies.data]
+  );
+  const companiesTotal = useMemo(
+    () => Array.isArray(companies.data) ? companies.data.length : (companies.data?.total || 0),
+    [companies.data]
+  );
+  const companyFilterOptions = useMemo(
+    () => Array.isArray(companies.data) ? {} : (companies.data?.filter_options || {}),
     [companies.data]
   );
 
@@ -89,12 +112,6 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedLeadIds, setSelectedLeadIds] = useState([]);
   const [bulkAction, setBulkAction] = useState("");
-
-  // Pagination & Filtering (Simplified local version for now)
-  const [currentPage, setCurrentPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const [columnFilters, setColumnFilters] = useState({});
-  const [sort, setSort] = useState({ key: "id", direction: "desc" });
 
   const assignLeadsGrid = propertyGrids.data?.find(g => g.key === "assign_leads");
 
@@ -276,61 +293,31 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
     return company.assigned_user_name || user?.name || String(company.assigned_to);
   };
 
-  const assignedToOptions = useMemo(
-    () => uniqueSorted(companiesList.map((company) => getAssignedToName(company))),
-    [companiesList, users.data]
-  );
+  const assignedToOptions = useMemo(() => {
+    const list = (users.data || []).map((u) => u.name);
+    return ["Not Assigned", ...uniqueSorted(list)];
+  }, [users.data]);
 
-  const assignedByOptions = useMemo(
-    () => uniqueSorted(companiesList.map((company) => company.assigned_by_name || "System")),
-    [companiesList]
-  );
+  const assignedByOptions = useMemo(() => {
+    const list = (users.data || []).map((u) => u.name);
+    return ["System", ...uniqueSorted(list)];
+  }, [users.data]);
+
   const cityProperty = useMemo(
     () => gridProperties.find((property) => property.field_key === "city" || property.name?.toLowerCase() === "city"),
     [gridProperties]
   );
+
   const cityOptions = useMemo(() => {
     if (!cityProperty) return [];
-    return uniqueSorted(companiesList
-      .map((company) => getVal(company, cityProperty))
+    const values = companyFilterOptions[cityProperty.field_key] || companiesList.map((company) => getVal(company, cityProperty));
+    return uniqueSorted(values
       .flatMap((value) => String(value || "").split(",").map((item) => item.trim()))
       .filter(Boolean));
-  }, [companiesList, cityProperty]);
+  }, [companiesList, cityProperty, companyFilterOptions]);
 
-  const filteredData = useMemo(() => {
-    let data = companiesList;
-
-    data = data.filter((company) =>
-      gridProperties.every((property) => {
-        const filter = columnFilters[property.field_key];
-        if (!filter || (Array.isArray(filter) && filter.length === 0)) return true;
-
-        const cellVal = String(getVal(company, property)).toLowerCase();
-
-        if (Array.isArray(filter)) {
-          return filter.some(f => cellVal.includes(String(f).toLowerCase()));
-        }
-        return cellVal.includes(String(filter).toLowerCase());
-      })
-    );
-
-    // Sort
-    if (sort.key) {
-      const prop = properties.data?.find(p => p.field_key === sort.key);
-      data = [...data].sort((a, b) => {
-        const valA = prop ? getVal(a, prop) : (a[sort.key] || "");
-        const valB = prop ? getVal(b, prop) : (b[sort.key] || "");
-        return sort.direction === "asc"
-          ? String(valA).localeCompare(String(valB), undefined, { numeric: true })
-          : String(valB).localeCompare(String(valA), undefined, { numeric: true });
-      });
-    }
-
-    return data;
-  }, [companiesList, columnFilters, sort, properties.data, users.data, gridProperties]);
-
-  const totalPages = Math.ceil(filteredData.length / pageSize);
-  const visibleData = filteredData.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+  const totalPages = Math.max(1, Math.ceil(companiesTotal / pageSize));
+  const visibleData = companiesList;
   const selectedLeadIdSet = new Set(selectedLeadIds.map(Number));
 
   const toggleLeadSelection = (companyId) => {
@@ -351,7 +338,10 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
             <input
               placeholder="Search leads..."
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e) => {
+                setQ(e.target.value);
+                setCurrentPage(1);
+              }}
             />
           </div>
           <span className="user-debug-info" style={{ fontSize: '11px', color: '#94a3b8' }}>
@@ -410,9 +400,9 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
           <div className="muted">No leads found</div>
         ) : (
           <>
-            {bulkMode && (
+             {bulkMode && (
               <div className="bulk-action-bar">
-                <button type="button" className="bulk-link" onClick={() => setSelectedLeadIds(filteredData.map((company) => Number(company.id)))}>Select all</button>
+                <button type="button" className="bulk-link" onClick={() => setSelectedLeadIds(companiesList.map((company) => Number(company.id)))}>Select all</button>
                 <button type="button" className="bulk-link" onClick={() => setSelectedLeadIds([])}>Unselect all</button>
                 <strong>{selectedLeadIds.length}</strong>
                 <span>Items Selected</span>
@@ -433,7 +423,10 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
                     {bulkMode && <th className="bulk-select-col" />}
                     {gridProperties.map((p) => (
                       <th key={p.field_key} style={{ width: `${getColumnWidth(p)}px`, minWidth: `${getColumnWidth(p)}px`, maxWidth: `${getColumnWidth(p)}px` }}>
-                        <button type="button" className="sort-header" onClick={() => setSort({ key: p.field_key, direction: sort.key === p.field_key && sort.direction === "asc" ? "desc" : "asc" })}>
+                        <button type="button" className="sort-header" onClick={() => {
+                          setSort({ key: p.field_key, direction: sort.key === p.field_key && sort.direction === "asc" ? "desc" : "asc" });
+                          setCurrentPage(1);
+                        }}>
                           {p.name} <span>{sort.key === p.field_key ? (sort.direction === "asc" ? "▲" : "▼") : "↕"}</span>
                         </button>
                         {columnWidthEdit && (
@@ -446,7 +439,7 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
                   <tr className="filter-row">
                     {bulkMode && <th className="bulk-select-col" />}
                     {gridProperties.map((p) => {
-                      const dataValues = companiesList.map(c => getVal(c, p))
+                      const dataValues = (companyFilterOptions[p.field_key] || companiesList.map(c => getVal(c, p)))
                         .flatMap(v => String(v).split(",").map(s => s.trim()))
                         .filter(Boolean);
                       const optionMap = new Map(propertyOptions(p).map((option) => [String(option.value), option.label]));
@@ -485,7 +478,10 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
                               label={p.name}
                               options={uniqueValues}
                               value={columnFilters[p.field_key] || (p.filter_type === "multiselect" ? [] : "")}
-                              onChange={(val) => setColumnFilters(prev => ({ ...prev, [p.field_key]: val }))}
+                              onChange={(val) => {
+                                setColumnFilters(prev => ({ ...prev, [p.field_key]: val }));
+                                setCurrentPage(1);
+                              }}
                               isMulti={p.filter_type === "multiselect"}
                             />
                           ) : (
@@ -493,7 +489,10 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
                               className="filter-input"
                               placeholder={`Filter ${p.name}`}
                               value={columnFilters[p.field_key] || ""}
-                              onChange={(e) => setColumnFilters(prev => ({ ...prev, [p.field_key]: e.target.value }))}
+                              onChange={(e) => {
+                                setColumnFilters(prev => ({ ...prev, [p.field_key]: e.target.value }));
+                                setCurrentPage(1);
+                              }}
                             />
                           )}
                         </th>
@@ -689,7 +688,7 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
               page={currentPage}
               totalPages={totalPages}
               pageSize={pageSize}
-              totalRows={filteredData.length}
+              totalRows={companiesTotal}
               onPageChange={setCurrentPage}
               onPageSizeChange={(size) => { setPageSize(size); setCurrentPage(1); }}
               pageSizeOptions={[10, 25, 50, 100]}

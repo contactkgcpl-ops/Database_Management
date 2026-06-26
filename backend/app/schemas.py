@@ -619,5 +619,31 @@ class AttendanceReportResponse(BaseModel):
     summary: list[AttendanceSummaryItem]
 
 
+# --- Our Companies ---
+
+class OurCompanyBase(BaseModel):
+    name: str = Field(min_length=1, max_length=180)
+    logo_url: str | None = None
+    website: str | None = None
+    email: EmailStr | None = None
+    phone: str | None = None
+    address: str | None = None
+    status: str = "Active"
+
+class OurCompanyCreate(OurCompanyBase):
+    pass
+
+class OurCompanyUpdate(OurCompanyBase):
+    pass
+
+class OurCompanyOut(OurCompanyBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+
 
 

@@ -505,6 +505,20 @@ class LeaveApproval(Base, TimestampMixin):
     approver: Mapped["User"] = relationship(foreign_keys=[approver_id])
 
 
+class OurCompany(Base, TimestampMixin):
+    __tablename__ = "our_companies"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    name: Mapped[str] = mapped_column(String(180), unique=True, index=True)
+    logo_url: Mapped[str | None] = mapped_column(Text)
+    website: Mapped[str | None] = mapped_column(String(255))
+    email: Mapped[str | None] = mapped_column(String(160))
+    phone: Mapped[str | None] = mapped_column(String(50))
+    address: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(20), default="Active")
+
+
+
 
 
 

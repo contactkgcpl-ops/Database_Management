@@ -22,6 +22,8 @@ from app.modules.chat import router as chat
 from app.modules.tasks import router as tasks
 from app.modules.vendors import router as vendors
 from app.modules.leave_management import router as leave_management
+from app.modules.our_companies import router as our_companies
+from app.modules.tracking import router as tracking
 from app.seed import seed_defaults
 
 settings = get_settings()
@@ -71,4 +73,6 @@ app.include_router(chat.router, prefix="/api")
 app.include_router(tasks.router, prefix="/api")
 app.include_router(vendors.router, prefix="/api")
 app.include_router(leave_management.router, prefix="/api")
+app.include_router(our_companies.router, prefix="/api")
+app.include_router(tracking.router, prefix="/api")
 # trigger reload for schema migration

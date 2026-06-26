@@ -20,9 +20,6 @@ def migrate_company_storage_schema(db: Session) -> None:
     inspector = inspect(engine)
     tables = set(inspector.get_table_names())
     
-    # Core columns we want to keep
-    core_columns = {"id", "company_name", "created_at", "updated_at", "created_by"}
-    
     if "companies" not in tables:
         dialect = engine.dialect.name
         if dialect == "mysql":
@@ -587,6 +584,7 @@ def migrate_all(db: Session) -> None:
     migrate_vendors_schema(db)
     migrate_hourly_reports_calling_schema(db)
     migrate_leave_requests_half_days(db)
+    migrate_our_companies_schema(db)
 
 def migrate_leave_requests_half_days(db: Session) -> None:
     inspector = inspect(engine)
@@ -610,4 +608,46 @@ def migrate_leave_requests_half_days(db: Session) -> None:
     if "cancel_reason" not in columns:
         db.execute(text("ALTER TABLE leave_requests ADD COLUMN cancel_reason TEXT"))
     db.commit()
+
+
+def migrate_our_companies_schema(db: Session) -> None:
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    
+    if "our_companies" not in tables:
+        dialect = engine.dialect.name
+        if dialect == "mysql":
+            db.execute(text("""
+                CREATE TABLE our_companies (
+                    id INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    name VARCHAR(180) NOT NULL UNIQUE,
+                    logo_url TEXT,
+                    website VARCHAR(255),
+                    email VARCHAR(160),
+                    phone VARCHAR(50),
+                    address TEXT,
+                    status VARCHAR(20) DEFAULT 'Active',
+                    created_at DATETIME,
+                    updated_at DATETIME,
+                    INDEX ix_our_companies_name (name)
+                )
+            """))
+        else:
+            db.execute(text("""
+                CREATE TABLE our_companies (
+                    id INTEGER PRIMARY KEY,
+                    name VARCHAR(180) NOT NULL UNIQUE,
+                    logo_url TEXT,
+                    website VARCHAR(255),
+                    email VARCHAR(160),
+                    phone VARCHAR(50),
+                    address TEXT,
+                    status VARCHAR(20) DEFAULT 'Active',
+                    created_at DATETIME,
+                    updated_at DATETIME
+                )
+            """))
+            db.execute(text("CREATE UNIQUE INDEX ix_our_companies_name ON our_companies (name)"))
+        db.commit()
+
 

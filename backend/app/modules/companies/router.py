@@ -57,6 +57,19 @@ def list_company_records(
     }
 
 
+@router.get("/states-and-cities")
+def get_states_and_cities(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_permission("companies.view")),
+):
+    from pathlib import Path
+    json_path = Path(__file__).parent.parent.parent / "core" / "states-and-districts.json"
+    if json_path.exists():
+        with open(json_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    return {"states": []}
+
+
 @router.get("/my", response_model=list[CompanyOut])
 def list_my_leads(
     q: str | None = None,

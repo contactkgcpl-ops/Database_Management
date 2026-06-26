@@ -53,41 +53,61 @@ def list_companies(
         param_counter = 0
         
         for key, val in filters.items():
-            if val is None or val == "" or (isinstance(val, list) and len(val) == 0):
+            # Parse mode and value
+            mode = "contains"
+            filter_val = val
+            if isinstance(val, dict):
+                mode = val.get("mode", "contains")
+                filter_val = val.get("value", "")
+
+            if mode == "contains":
+                if filter_val is None or filter_val == "" or (isinstance(filter_val, list) and len(filter_val) == 0):
+                    continue
+            elif mode not in ("empty", "not_empty"):
                 continue
                 
             if key == "company_name":
-                query = query.filter(Company.company_name.ilike(f"%{val}%"))
+                if mode == "empty":
+                    query = query.filter(or_(Company.company_name.is_(None), Company.company_name == ""))
+                elif mode == "not_empty":
+                    query = query.filter(and_(Company.company_name.isnot(None), Company.company_name != ""))
+                else:
+                    query = query.filter(Company.company_name.ilike(f"%{filter_val}%"))
             elif key == "created_by_name":
-                query = query.join(Company.creator).filter(User.name.ilike(f"%{val}%"))
+                if mode == "empty":
+                    query = query.filter(Company.creator_id.is_(None))
+                elif mode == "not_empty":
+                    query = query.filter(Company.creator_id.isnot(None))
+                else:
+                    query = query.join(Company.creator).filter(User.name.ilike(f"%{filter_val}%"))
             elif key == "assigned_to":
-                if isinstance(val, list):
+                if isinstance(filter_val, list):
                     or_conds = []
-                    for v in val:
+                    for v in filter_val:
                         if v == "Not Assigned":
                             or_conds.append(LeadManage.assigned_to_id.is_(None))
                         else:
                             or_conds.append(AssignedUser.name == v)
                     query = query.filter(or_(*or_conds))
                 else:
-                    if val == "Not Assigned":
+                    if filter_val == "Not Assigned":
                         query = query.filter(LeadManage.assigned_to_id.is_(None))
                     else:
-                        query = query.filter(AssignedUser.name.ilike(f"%{val}%"))
+                        query = query.filter(AssignedUser.name.ilike(f"%{filter_val}%"))
             elif key == "assigned_by_name":
-                if isinstance(val, list):
+                if isinstance(filter_val, list):
                     or_conds = []
-                    for v in val:
+                    for v in filter_val:
                         if v == "System":
                             or_conds.append(LeadManage.assigned_by_id.is_(None))
                         else:
                             or_conds.append(AssignedByUser.name == v)
                     query = query.filter(or_(*or_conds))
                 else:
-                    if val == "System":
+                    if filter_val == "System":
                         query = query.filter(LeadManage.assigned_by_id.is_(None))
                     else:
-                        query = query.filter(AssignedByUser.name.ilike(f"%{val}%"))
+                        query = query.filter(AssignedByUser.name.ilike(f"%{filter_val}%"))
             elif key in prop_map:
                 prop = prop_map[key]
                 param_name = f"filter_val_{param_counter}"
@@ -95,12 +115,16 @@ def list_companies(
                 
                 if prop.is_multi_value:
                     # Multi-value property (stored in company_property_values)
-                    if isinstance(val, list):
+                    if mode == "empty":
+                        query = query.filter(~Company.property_values.any(CompanyPropertyValue.property_id == prop.id))
+                    elif mode == "not_empty":
+                        query = query.filter(Company.property_values.any(CompanyPropertyValue.property_id == prop.id))
+                    elif isinstance(filter_val, list):
                         query = query.filter(
                             Company.property_values.any(
                                 and_(
                                     CompanyPropertyValue.property_id == prop.id,
-                                    CompanyPropertyValue.value.in_(val)
+                                    CompanyPropertyValue.value.in_(filter_val)
                                 )
                             )
                         )
@@ -109,31 +133,39 @@ def list_companies(
                             Company.property_values.any(
                                 and_(
                                     CompanyPropertyValue.property_id == prop.id,
-                                    CompanyPropertyValue.value.ilike(f"%{val}%")
+                                    CompanyPropertyValue.value.ilike(f"%{filter_val}%")
                                 )
                             )
                         )
                 else:
                     # Single-value property (stored as dynamic column on companies or lead_manage)
                     if prop.entity_type == "company":
-                        if isinstance(val, list):
+                        if mode == "empty":
+                            query = query.filter(or_(text(f"companies.{prop.field_key} IS NULL"), text(f"companies.{prop.field_key} = ''")))
+                        elif mode == "not_empty":
+                            query = query.filter(and_(text(f"companies.{prop.field_key} IS NOT NULL"), text(f"companies.{prop.field_key} != ''")))
+                        elif isinstance(filter_val, list):
                             # Multiselect filter
-                            placeholders = ", ".join(f":{param_name}_{i}" for i in range(len(val)))
+                            placeholders = ", ".join(f":{param_name}_{i}" for i in range(len(filter_val)))
                             query = query.filter(text(f"companies.{prop.field_key} IN ({placeholders})"))
-                            for i, v in enumerate(val):
+                            for i, v in enumerate(filter_val):
                                 sql_params[f"{param_name}_{i}"] = v
                         else:
                             query = query.filter(text(f"LOWER(companies.{prop.field_key}) LIKE :{param_name}"))
-                            sql_params[param_name] = f"%{str(val).lower()}%"
+                            sql_params[param_name] = f"%{str(filter_val).lower()}%"
                     elif prop.entity_type == "lead":
-                        if isinstance(val, list):
-                            placeholders = ", ".join(f":{param_name}_{i}" for i in range(len(val)))
+                        if mode == "empty":
+                            query = query.filter(or_(text(f"lead_manage.{prop.field_key} IS NULL"), text(f"lead_manage.{prop.field_key} = ''")))
+                        elif mode == "not_empty":
+                            query = query.filter(and_(text(f"lead_manage.{prop.field_key} IS NOT NULL"), text(f"lead_manage.{prop.field_key} != ''")))
+                        elif isinstance(filter_val, list):
+                            placeholders = ", ".join(f":{param_name}_{i}" for i in range(len(filter_val)))
                             query = query.filter(text(f"lead_manage.{prop.field_key} IN ({placeholders})"))
-                            for i, v in enumerate(val):
+                            for i, v in enumerate(filter_val):
                                 sql_params[f"{param_name}_{i}"] = v
                         else:
                             query = query.filter(text(f"LOWER(lead_manage.{prop.field_key}) LIKE :{param_name}"))
-                            sql_params[param_name] = f"%{str(val).lower()}%"
+                            sql_params[param_name] = f"%{str(filter_val).lower()}%"
                             
         if sql_params:
             query = query.params(**sql_params)
@@ -176,6 +208,38 @@ def list_companies(
     return query.all(), total_count
 
 
+_INDIAN_STATES = None
+_INDIAN_CITIES = None
+
+
+def _load_indian_states_and_cities():
+    global _INDIAN_STATES, _INDIAN_CITIES
+    if _INDIAN_STATES is not None and _INDIAN_CITIES is not None:
+        return _INDIAN_STATES, _INDIAN_CITIES
+
+    _INDIAN_STATES = []
+    _INDIAN_CITIES = []
+    try:
+        import json
+        from pathlib import Path
+        json_path = Path(__file__).parent.parent.parent / "core" / "states-and-districts.json"
+        if json_path.exists():
+            with open(json_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if "states" in data:
+                    states_set = set()
+                    cities_set = set()
+                    for s in data["states"]:
+                        states_set.add(s["state"].strip())
+                        for d in s["districts"]:
+                            cities_set.add(d.strip())
+                    _INDIAN_STATES = sorted(list(states_set))
+                    _INDIAN_CITIES = sorted(list(cities_set))
+    except Exception as e:
+        print(f"Error loading states and districts JSON: {e}")
+    return _INDIAN_STATES, _INDIAN_CITIES
+
+
 def list_company_filter_options(db: Session, q: str | None = None) -> dict[str, list[str]]:
     companies, _ = list_companies(db, page=1, page_size=100000, q=q)
     options: dict[str, set[str]] = {
@@ -205,6 +269,15 @@ def list_company_filter_options(db: Session, q: str | None = None) -> dict[str, 
                 item = item.strip()
                 if item:
                     field_options.add(item)
+
+    # Supplement Indian states and cities for filter dropdown options
+    indian_states, indian_cities = _load_indian_states_and_cities()
+    if indian_states:
+        state_options = options.setdefault("state", set())
+        state_options.update(indian_states)
+    if indian_cities:
+        city_options = options.setdefault("city", set())
+        city_options.update(indian_cities)
 
     return {
         key: sorted(values, key=lambda item: item.lower())

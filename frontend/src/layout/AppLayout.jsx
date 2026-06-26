@@ -11,6 +11,7 @@ import { ImportCompaniesPage } from "../pages/ImportCompaniesPage";
 import { BulkEditCompaniesPage } from "../pages/BulkEditCompaniesPage";
 import { VendorsPage } from "../pages/VendorsPage";
 import { DashboardPage } from "../pages/DashboardPage";
+import { OurCompaniesPage } from "../pages/OurCompaniesPage";
 import { PropertiesPage } from "../pages/PropertiesPage";
 import { RolesPage } from "../pages/RolesPage";
 import { UsersPage } from "../pages/UsersPage";
@@ -30,14 +31,17 @@ import { MyLeavesPage } from "../pages/MyLeavesPage";
 import { LeaveApprovalsPage } from "../pages/LeaveApprovalsPage";
 import { LeaveCalendarPage } from "../pages/LeaveCalendarPage";
 import { EmployeeAttendancePage } from "../pages/EmployeeAttendancePage";
+import { ConnectionTrackingPage } from "../pages/ConnectionTrackingPage";
 
 const pageMap = {
+  "connection-tracking": ConnectionTrackingPage,
   dashboard: DashboardPage,
   users: UsersPage,
   roles: RolesPage,
   properties: PropertiesPage,
   companies: CompaniesPage,
   "add-company": AddCompanyPage,
+  "our-companies": OurCompaniesPage,
   "import-companies": ImportCompaniesPage,
   "bulk-edit-companies": BulkEditCompaniesPage,
   vendors: VendorsPage,
@@ -102,6 +106,7 @@ export function AppLayout({ page, setPage }) {
   }, [user.permissions]);
   const CurrentPage = pageMap[page] || DashboardPage;
   const pageLabel = page === "add-company" ? "Add Company" :
+    page === "our-companies" ? "Our Companies" :
     page === "import-companies" ? "Import Companies" :
       page === "bulk-edit-companies" ? "Bulk Edit Companies" :
         page === "vendors" ? "Vendors" :

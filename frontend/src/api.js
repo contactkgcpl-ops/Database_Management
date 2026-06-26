@@ -125,6 +125,7 @@ export const api = {
   updateProperty: (id, data) => request(`/properties/${id}`, { method: "PUT", body: JSON.stringify(data) }),
   updatePropertyGridColumns: (columns) => request("/properties/grid-columns", { method: "PUT", body: JSON.stringify({ columns }) }),
   deleteProperty: (id) => request(`/properties/${id}`, { method: "DELETE" }),
+  statesAndCities: () => request("/companies/states-and-cities"),
   companies: (params = {}) => {
     if (typeof params === "string") {
       return request(`/companies${params ? `?q=${encodeURIComponent(params)}` : ""}`);
@@ -239,4 +240,21 @@ export const api = {
   updateLeave: (leaveId, data) => request(`/leaves/${leaveId}`, { method: "PUT", body: JSON.stringify(data) }),
   myApprovers: (userId) => request("/leaves/my-approvers" + (userId ? `?user_id=${userId}` : "")),
   leaveRequests: () => request("/leaves/requests"),
+  // Our Companies Management
+  ourCompanies: () => request("/our-companies"),
+  ourCompany: (id) => request(`/our-companies/${id}`),
+  createOurCompany: (data) => request("/our-companies", { method: "POST", body: JSON.stringify(data) }),
+  updateOurCompany: (id, data) => request(`/our-companies/${id}`, { method: "PUT", body: JSON.stringify(data) }),
+  deleteOurCompany: (id) => request(`/our-companies/${id}`, { method: "DELETE" }),
+  uploadOurCompanyLogo: (formData) => request("/our-companies/upload", { method: "POST", body: formData }),
+  // Connection Tracking
+  trackingFilters: () => request("/tracking/filters"),
+  connectionTracking: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.states) params.states.forEach(s => q.append("states", s));
+    if (params.companies) params.companies.forEach(c => q.append("companies", c));
+    if (params.industries) params.industries.forEach(i => q.append("industries", i));
+    const qs = q.toString();
+    return request(`/tracking/connection${qs ? `?${qs}` : ""}`);
+  }
 };

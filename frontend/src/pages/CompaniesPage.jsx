@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Columns3, FileUp, GripVertical, MoreVertical, Pencil, Plus, Ruler, Save, Search, Trash2, X, SquareCheckBig, History } from "lucide-react";
+import { Columns3, FileUp, GripVertical, MoreVertical, Pencil, Plus, Ruler, Save, Search, Trash2, X, SquareCheckBig, History, Filter } from "lucide-react";
 import { GridFilterDropdown } from "../components/GridFilterDropdown";
 import { api } from "../api";
 import { useNotify } from "../components/NotificationProvider";
@@ -97,6 +97,8 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
   const [columnWidthEdit, setColumnWidthEdit] = useState(false);
   const [draftColumnWidths, setDraftColumnWidths] = useState({});
   const [columnFilters, setColumnFilters] = useState({});
+  const [draftColumnFilters, setDraftColumnFilters] = useState({});
+  const [showFiltersPanel, setShowFiltersPanel] = useState(false);
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
@@ -137,6 +139,7 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
   }), [companyPage, companyPageSize, q, companySort.key, companySort.direction, serializedFilters]);
   const properties = useLoad(() => api.properties(), []);
   const propertyGrids = useLoad(() => api.propertyGrids(), []);
+  const geoData = useLoad(() => api.statesAndCities(), []);
 
   const companyGridKey = propertyGrids.data[0]?.key || "companies";
   const activeProperties = properties.data.filter((property) => property.is_active);
@@ -178,8 +181,24 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
     setDraftColumnWidths((current) => ({ ...current, [fieldKey]: Number(value) }));
   };
 
-  const setColumnFilter = (fieldKey, value) => {
-    setColumnFilters((current) => ({ ...current, [fieldKey]: value }));
+  const setDraftColumnFilter = (fieldKey, value) => {
+    setDraftColumnFilters((current) => {
+      const next = { ...current, [fieldKey]: value };
+      if (fieldKey === "state") {
+        delete next.city;
+      }
+      return next;
+    });
+  };
+
+  const applyFilters = () => {
+    setColumnFilters({ ...draftColumnFilters });
+    setCompanyPage(1);
+  };
+
+  const clearAllFilters = () => {
+    setDraftColumnFilters({});
+    setColumnFilters({});
     setCompanyPage(1);
   };
 
@@ -236,7 +255,23 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
   return (
     <div className="stack">
       <div className="toolbar split-toolbar">
-        <input className="search" placeholder="Search companies..." value={q} onChange={(e) => setQ(e.target.value)} />
+        <div style={{ display: "flex", gap: "8px", flex: 1 }}>
+          <input className="search" placeholder="Search companies..." value={q} onChange={(e) => setQ(e.target.value)} style={{ margin: 0, maxWidth: "320px" }} />
+          <button
+            type="button"
+            className={`secondary icon-button ${showFiltersPanel ? "active" : ""}`}
+            onClick={() => {
+              if (!showFiltersPanel) {
+                setDraftColumnFilters({ ...columnFilters });
+              }
+              setShowFiltersPanel(!showFiltersPanel);
+            }}
+            style={showFiltersPanel ? { backgroundColor: "#f0fdf4", borderColor: "#176b5b", color: "#176b5b", minHeight: "38px" } : { minHeight: "38px" }}
+          >
+            <Filter size={16} />
+            Filters
+          </button>
+        </div>
         {canManage && (
           <div className="toolbar-menu-wrap">
             {columnWidthEdit ? (
@@ -274,6 +309,169 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
         )}
       </div>
 
+      {showFiltersPanel && (
+        <div className="panel stack" style={{ padding: "16px", background: "#f8fafc", border: "1px solid #e2e8f0", borderRadius: "8px", marginBottom: "16px" }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", borderBottom: "1px solid #e2e8f0", paddingBottom: "8px" }}>
+            <h4 style={{ margin: 0, fontSize: "13px", color: "#334155", display: "flex", alignItems: "center", gap: "6px" }}>
+              <Filter size={14} /> Active Grid Filters
+            </h4>
+            {Object.keys(draftColumnFilters).some(key => {
+              const val = draftColumnFilters[key];
+              if (val === null || val === undefined) return false;
+              if (Array.isArray(val)) return val.length > 0;
+              if (typeof val === "object") {
+                return val.mode !== "contains" || (val.value !== undefined && val.value !== "");
+              }
+              return val !== "";
+            }) && (
+              <button
+                type="button"
+                className="clear-link"
+                onClick={clearAllFilters}
+                style={{ fontSize: "11px", color: "#ef4444", textDecoration: "underline", background: "none", border: "none", cursor: "pointer", fontWeight: "600" }}
+              >
+                Clear All Filters
+              </button>
+            )}
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "16px" }}>
+            {gridProperties.map((p) => {
+              const dataValues = (companyFilterOptions[p.field_key] || companiesList.map(c => getCompanyPropertyValue(c, p)))
+                .flatMap(v => String(v).split(",").map(s => s.trim()))
+                .filter(Boolean);
+              const optionMap = new Map(propertyOptions(p).map((option) => [String(option.value), option.label]));
+              const rawOptions = dataValues.filter((item) => !optionMap.has(String(item)));
+              const uniqueValues = [
+                ...propertyOptions(p),
+                ...Array.from(new Set(rawOptions)).sort().map((item) => ({ value: item, label: formatPropertyValue(p, item) || item }))
+              ];
+
+              // Calculate if this is a City field and if State has been selected
+              const selectedStatesRaw = draftColumnFilters.state || [];
+              const selectedStates = Array.isArray(selectedStatesRaw)
+                ? selectedStatesRaw
+                : (selectedStatesRaw ? [selectedStatesRaw] : []);
+              const isCityField = p.field_key === "city";
+              const isCityAndNoState = isCityField && selectedStates.length === 0;
+
+              let finalUniqueValues = uniqueValues;
+              if (isCityField && selectedStates.length > 0) {
+                const allowedCities = new Set();
+                const statesList = geoData?.data?.states || [];
+                statesList.forEach((s) => {
+                  if (selectedStates.includes(s.state)) {
+                    if (Array.isArray(s.districts)) {
+                      s.districts.forEach((d) => allowedCities.add(d.trim()));
+                    }
+                  }
+                });
+                finalUniqueValues = uniqueValues.filter((option) => allowedCities.has(String(option.value)));
+              }
+
+              return (
+                <div key={p.field_key} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                  <span style={{ fontSize: "11px", fontWeight: "800", color: "#475569", textTransform: "uppercase", letterSpacing: "0.025em" }}>{p.name}</span>
+                  {isCityAndNoState ? (
+                    <div style={{
+                      padding: "6px 10px",
+                      fontSize: "12px",
+                      border: "1px solid #fee2e2",
+                      backgroundColor: "#fee2e2",
+                      color: "#991b1b",
+                      borderRadius: "6px",
+                      height: "28px",
+                      display: "flex",
+                      alignItems: "center",
+                      fontWeight: "600"
+                    }}>
+                      Select state first
+                    </div>
+                  ) : p.filter_type === "dropdown" || p.filter_type === "multiselect" ? (
+                    <GridFilterDropdown
+                      label={p.name}
+                      options={finalUniqueValues}
+                      value={draftColumnFilters[p.field_key] || (p.filter_type === "multiselect" ? [] : "")}
+                      onChange={(val) => setDraftColumnFilter(p.field_key, val)}
+                      isMulti={p.filter_type === "multiselect"}
+                    />
+                  ) : (() => {
+                    const filterObj = typeof draftColumnFilters[p.field_key] === "object" && draftColumnFilters[p.field_key] !== null
+                      ? draftColumnFilters[p.field_key]
+                      : { mode: "contains", value: draftColumnFilters[p.field_key] || "" };
+                    return (
+                      <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+                        <select
+                          style={{
+                            padding: "4px 8px",
+                            fontSize: "12px",
+                            border: "1px solid #ccd7d3",
+                            borderRadius: "6px",
+                            backgroundColor: "#f8fafc",
+                            color: "#475569",
+                            height: "28px",
+                            outline: "none",
+                            cursor: "pointer"
+                          }}
+                          value={filterObj.mode || "contains"}
+                          onChange={(e) => {
+                            const nextMode = e.target.value;
+                            setDraftColumnFilter(p.field_key, {
+                              mode: nextMode,
+                              value: nextMode === "contains" ? filterObj.value : ""
+                            });
+                          }}
+                        >
+                          <option value="contains">Contains Value</option>
+                          <option value="not_empty">Has Value (Not Empty)</option>
+                          <option value="empty">No Value (Empty)</option>
+                        </select>
+                        {filterObj.mode === "contains" && (
+                          <input
+                            style={{
+                              padding: "6px 10px",
+                              fontSize: "12px",
+                              border: "1px solid #ccd7d3",
+                              borderRadius: "6px",
+                              outline: "none",
+                              width: "100%",
+                              backgroundColor: "#fff",
+                              height: "28px"
+                            }}
+                            placeholder={`Filter ${p.name}`}
+                            value={filterObj.value || ""}
+                            onChange={(e) => setDraftColumnFilter(p.field_key, {
+                              mode: "contains",
+                              value: e.target.value
+                            })}
+                          />
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", justifyContent: "flex-end", gap: "12px", marginTop: "16px", borderTop: "1px solid #e2e8f0", paddingTop: "12px" }}>
+            <button
+              type="button"
+              className="secondary"
+              onClick={clearAllFilters}
+              style={{ padding: "6px 16px", fontSize: "12px", fontWeight: "600", borderRadius: "6px", height: "32px", display: "flex", alignItems: "center", gap: "6px", cursor: "pointer" }}
+            >
+              Clear All
+            </button>
+            <button
+              type="button"
+              onClick={applyFilters}
+              style={{ backgroundColor: "#176b5b", color: "#fff", border: "none", padding: "6px 16px", fontSize: "12px", fontWeight: "600", borderRadius: "6px", cursor: "pointer", height: "32px", display: "flex", alignItems: "center", gap: "6px" }}
+            >
+              Apply Filters
+            </button>
+          </div>
+        </div>
+      )}
+
       <div className="data-grid">
         {companies.loading ? (
           <div className="muted">Loading companies...</div>
@@ -308,43 +506,6 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
                       </th>
                     ))}
                     {canManage && <th style={{ width: "100px" }}>Actions</th>}
-                  </tr>
-                  <tr className="filter-row">
-                    {bulkMode && <th />}
-                    {gridProperties.map((p) => {
-                      const filterVal = columnFilters[p.field_key] || "";
-
-                      const dataValues = (companyFilterOptions[p.field_key] || companiesList.map(c => getCompanyPropertyValue(c, p)))
-                        .flatMap(v => String(v).split(",").map(s => s.trim()))
-                        .filter(Boolean);
-                      const optionMap = new Map(propertyOptions(p).map((option) => [String(option.value), option.label]));
-                      const rawOptions = dataValues.filter((item) => !optionMap.has(String(item)));
-                      const uniqueValues = [
-                        ...propertyOptions(p),
-                        ...Array.from(new Set(rawOptions)).sort().map((item) => ({ value: item, label: formatPropertyValue(p, item) || item }))
-                      ];
-
-                      return (
-                        <th key={`${p.field_key}-f`}>
-                          {p.filter_type === "dropdown" || p.filter_type === "multiselect" ? (
-                            <GridFilterDropdown
-                              label={p.name}
-                              options={uniqueValues}
-                              value={columnFilters[p.field_key] || (p.filter_type === "multiselect" ? [] : "")}
-                              onChange={(val) => setColumnFilter(p.field_key, val)}
-                              isMulti={p.filter_type === "multiselect"}
-                            />
-                          ) : (
-                            <input
-                              placeholder={`Filter ${p.name}`}
-                              value={columnFilters[p.field_key] || ""}
-                              onChange={(e) => setColumnFilter(p.field_key, e.target.value)}
-                            />
-                          )}
-                        </th>
-                      );
-                    })}
-                    {canManage && <th />}
                   </tr>
                 </thead>
                 <tbody>

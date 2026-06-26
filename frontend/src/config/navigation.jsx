@@ -21,6 +21,7 @@ export const navigation = [
       { key: "assign-leads", label: "Assign Company", icon: Users, page: "assign-leads", permission: "leads.assign" },
     ],
   },
+  { key: "our-companies", label: "Our Companies", icon: Building2, page: "our-companies", permission: "our_companies.view" },
   {
     key: "marketing",
     label: "connection",
@@ -76,6 +77,14 @@ export const navigation = [
       { key: "leave-my", label: "My Leaves", icon: ClipboardList, page: "leave-my", permission: "leave.view", alternatePermission: "leave.apply" },
       { key: "leave-approvals", label: "Approvals", icon: ClipboardList, page: "leave-approvals", permission: "leave.approve" },
       { key: "employee-attendance", label: "Employee Attendance", icon: ClipboardList, page: "employee-attendance", permission: "time.manage", alternatePermission: "leave.manage" },
+    ],
+  },
+  {
+    key: "tracking",
+    label: "Tracking",
+    icon: ClipboardList,
+    children: [
+      { key: "connection-tracking", label: "Connection Tracking", icon: ClipboardList, page: "connection-tracking", permission: "tracking.view" },
     ],
   },
 ];

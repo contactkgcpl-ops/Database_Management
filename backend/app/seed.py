@@ -42,15 +42,19 @@ DEFAULT_PERMISSIONS = [
     ("leave.approve", "Approve Leaves", "leave-management", "Leave Management", 122),
     ("leave.manage", "Manage Leaves", "leave-management", "Leave Management", 123),
     ("leave.calendar", "View Leave Calendar", "leave-management", "Leave Management", 124),
+    ("our_companies.view", "View Our Companies", "our-companies", "Our Companies", 130),
+    ("our_companies.manage", "Manage Our Companies", "our-companies", "Our Companies", 131),
+    ("tracking.view", "View Tracking Dashboard", "tracking", "Tracking", 140),
 ]
 
 DEFAULT_PROPERTIES = [
     # (name, field_key, object_type, group, description, is_required, is_unique, is_multi_value, entity_type, filter_type, show_on_grid, grid_order, sort_order)
     ("Contact Number", "contact_number", "mobile", "custom", "Contact Number", False, True, True, "company", "text", True, 2, 0),
     ("Email Id", "email_id", "email", "custom", "Email Id", False, True, True, "company", "text", True, 4, 0),
-    ("City", "city", "text", "custom", "City", True, False, False, "company", "multiselect", False, 0, 0),
+    ("City", "city", "text", "custom", "City", True, False, False, "company", "multiselect", True, 40, 0),
     ("Address", "address", "textarea", "custom", "Address", False, False, False, "company", "text", True, 3, 0),
     ("State", "state", "text", "custom", "State", False, False, False, "company", "multiselect", True, 20, 0),
+    ("Industries", "industries", "multiselect", "custom", "Industries", False, False, False, "company", "multiselect", True, 120, 0),
     ("Type", "type", "multiselect", "custom", "", False, False, False, "company", "multiselect", True, 80, 0),
     ("Website", "website", "text", "custom", "Website", False, False, False, "company", "text", True, 50, 0),
     ("Description", "description", "textarea", "custom", "", False, False, False, "company", "text", True, 60, 0),
@@ -96,6 +100,7 @@ DEFAULT_PROPERTY_OPTIONS = {
         ("Call", "call", 0),
         ("Email", "email", 10),
         ("Whatsapp", "whatsapp", 20),
+        ("Social Media Connect", "social_media", 30),
     ],
     "inquiry_source": [
         ("Website", "website", 0),

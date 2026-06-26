@@ -85,10 +85,46 @@ const buildCompanyPayload = (row, mapping, activeProperties) => {
     return payload;
 };
 
+const levenshtein = (a, b) => {
+    const tmp = [];
+    for (let i = 0; i <= a.length; i++) tmp[i] = [i];
+    for (let j = 0; j <= b.length; j++) tmp[0][j] = j;
+    for (let i = 1; i <= a.length; i++) {
+        for (let j = 1; j <= b.length; j++) {
+            tmp[i][j] = Math.min(
+                tmp[i - 1][j] + 1,
+                tmp[i][j - 1] + 1,
+                tmp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+            );
+        }
+    }
+    return tmp[a.length][b.length];
+};
+
+const getClosestCity = (typed, cityList) => {
+    if (!typed || !cityList.length) return "";
+    const target = typed.toLowerCase().trim();
+    
+    const subMatch = cityList.find(c => c.toLowerCase().startsWith(target) || c.toLowerCase().includes(target));
+    if (subMatch) return subMatch;
+    
+    let best = "";
+    let minDistance = 999;
+    for (const city of cityList) {
+        const dist = levenshtein(target, city.toLowerCase());
+        if (dist < minDistance && dist <= 3) {
+            minDistance = dist;
+            best = city;
+        }
+    }
+    return best;
+};
+
 export function BulkEditCompaniesPage({ onBack }) {
     const notify = useNotify();
     const properties = useLoad(() => api.properties(), []);
     const companies = useLoad(() => api.companies({ page_size: 100000 }), []);
+    const geoData = useLoad(() => api.statesAndCities(), []);
     const activeProperties = useMemo(() => properties.data.filter(p => p.is_active), [properties.data]);
     const companiesList = useMemo(
         () => Array.isArray(companies.data) ? companies.data : (companies.data?.companies || []),
@@ -98,6 +134,12 @@ export function BulkEditCompaniesPage({ onBack }) {
     const [step, setStep] = useState(0); // 0: Upload, 1: Mapping, 2: Preview
     const [csvData, setCsvData] = useState({ headers: [], rows: [] });
     const [mapping, setMapping] = useState({});
+    const mappedFields = Object.values(mapping);
+    const isCompanyNameMapped = mappedFields.includes("company_name");
+    const isCityMapped = mappedFields.includes("city");
+    const isStateMapped = mappedFields.includes("state");
+    const isIndustriesMapped = mappedFields.includes("industries");
+    const isTypeMapped = mappedFields.includes("type");
     const [importing, setImporting] = useState(false);
     const [editingCell, setEditingCell] = useState(null); 
     const [importProgress, setImportProgress] = useState(null); 
@@ -255,6 +297,117 @@ export function BulkEditCompaniesPage({ onBack }) {
         }));
     };
 
+    const renderCellEditor = (idx, header, val, row, fieldKey) => {
+        const isEditing = editingCell?.rowIndex === idx && editingCell?.headerId === header.id;
+
+        if (!isEditing) {
+            return <span className="cell-text">{val || <em className="muted">blank</em>}</span>;
+        }
+
+        if (fieldKey === "state") {
+            const statesList = geoData?.data?.states || [];
+            return (
+                <select
+                    autoFocus
+                    className="cell-input"
+                    value={val}
+                    onBlur={() => setEditingCell(null)}
+                    onChange={(e) => {
+                        const nextState = e.target.value;
+                        updateCell(idx, header.id, nextState);
+                        // Clear corresponding city column in this row
+                        const cityHeaderId = Object.keys(mapping).find(key => mapping[key] === "city");
+                        if (cityHeaderId) {
+                            updateCell(idx, cityHeaderId, "");
+                        }
+                        setEditingCell(null);
+                    }}
+                >
+                    <option value="">-- Select State --</option>
+                    {statesList.map(s => (
+                        <option key={s.state} value={s.state}>{s.state}</option>
+                    ))}
+                </select>
+            );
+        }
+
+        if (fieldKey === "city") {
+            const stateHeaderId = Object.keys(mapping).find(key => mapping[key] === "state");
+            const stateVal = stateHeaderId ? row[stateHeaderId] : "";
+            const statesList = geoData?.data?.states || [];
+            const matchedState = statesList.find(s => s.state === stateVal);
+            const citiesList = matchedState ? (matchedState.districts || []) : [];
+
+            return (
+                <select
+                    autoFocus
+                    className="cell-input"
+                    value={val}
+                    disabled={!stateVal}
+                    onBlur={() => setEditingCell(null)}
+                    onChange={(e) => {
+                        updateCell(idx, header.id, e.target.value);
+                        setEditingCell(null);
+                    }}
+                >
+                    <option value="">{!stateVal ? "Select state first" : "-- Select City --"}</option>
+                    {stateVal && citiesList.map(c => (
+                        <option key={c} value={c}>{c}</option>
+                    ))}
+                </select>
+            );
+        }
+
+        const prop = activeProperties.find(p => p.field_key === fieldKey);
+        if (prop && prop.options && prop.options.length > 0) {
+            const isMulti = prop.is_multi_value || prop.object_type === "multiselect";
+            const valList = isMulti ? val.split(",").map(v => v.trim()).filter(Boolean) : [val];
+            
+            return (
+                <select
+                    autoFocus
+                    className="cell-input"
+                    multiple={isMulti}
+                    value={isMulti ? valList : val}
+                    onBlur={() => setEditingCell(null)}
+                    onChange={(e) => {
+                        if (isMulti) {
+                            const selectedValues = Array.from(e.target.selectedOptions, o => o.value).join(",");
+                            updateCell(idx, header.id, selectedValues);
+                        } else {
+                            updateCell(idx, header.id, e.target.value);
+                            setEditingCell(null);
+                        }
+                    }}
+                >
+                    {!isMulti && <option value="">-- Select Option --</option>}
+                    {prop.options.map(opt => (
+                        <option key={opt.id} value={opt.value}>{opt.label || opt.value}</option>
+                    ))}
+                </select>
+            );
+        }
+
+        return (
+            <input
+                autoFocus
+                className="cell-input"
+                value={val}
+                onChange={(e) => updateCell(idx, header.id, e.target.value)}
+                onBlur={(e) => {
+                    updateCell(idx, header.id, sanitizeValue(e.target.value));
+                    setEditingCell(null);
+                }}
+                onKeyDown={(e) => {
+                    if (e.key === "Enter") {
+                        updateCell(idx, header.id, sanitizeValue(e.target.value));
+                        setEditingCell(null);
+                    }
+                }}
+            />
+        );
+    };
+
     const validateRow = (row, rowIndex) => {
         const payload = buildCompanyPayload(row, mapping, activeProperties);
         const matchedCompany = findMatchedCompany(row);
@@ -262,6 +415,85 @@ export function BulkEditCompaniesPage({ onBack }) {
 
         if (!payload.company_name?.trim()) {
             issues.push("Company Name is required");
+        }
+
+        // Check for required City property
+        const hasCityMapping = Object.values(mapping).includes("city");
+        if (!hasCityMapping) {
+            issues.push("City column mapping is missing (City is required)");
+        } else {
+            const cityHeaderId = Object.keys(mapping).find(key => mapping[key] === "city");
+            const cityValue = String(row[cityHeaderId] || "").trim();
+            if (!cityValue) {
+                issues.push("City is required");
+            } else {
+                const stateHeaderId = Object.keys(mapping).find(key => mapping[key] === "state");
+                const stateValue = stateHeaderId ? String(row[stateHeaderId] || "").trim() : "";
+                const statesList = geoData?.data?.states || [];
+                const matchedState = statesList.find(s => s.state.toLowerCase() === stateValue.toLowerCase());
+                if (matchedState) {
+                    const citiesList = matchedState.districts || [];
+                    const matchedCity = citiesList.find(c => c.toLowerCase() === cityValue.toLowerCase());
+                    if (!matchedCity) {
+                        const closest = getClosestCity(cityValue, citiesList);
+                        if (closest) {
+                            issues.push(`City "${cityValue}" is not a recognized district of ${matchedState.state}. Did you mean "${closest}"?`);
+                        } else {
+                            issues.push(`City "${cityValue}" is not a recognized district of ${matchedState.state}`);
+                        }
+                    }
+                } else if (!stateValue) {
+                    issues.push(`State must be specified to validate City "${cityValue}"`);
+                }
+            }
+        }
+
+        // Check for required State property
+        const hasStateMapping = Object.values(mapping).includes("state");
+        if (!hasStateMapping) {
+            issues.push("State column mapping is missing (State is required)");
+        } else {
+            const stateHeaderId = Object.keys(mapping).find(key => mapping[key] === "state");
+            const stateValue = String(row[stateHeaderId] || "").trim();
+            if (!stateValue) {
+                issues.push("State is required");
+            } else {
+                const statesList = geoData?.data?.states || [];
+                const matchedState = statesList.find(s => s.state.toLowerCase() === stateValue.toLowerCase());
+                if (!matchedState) {
+                    const availableStates = statesList.map(s => s.state);
+                    const closest = getClosestCity(stateValue, availableStates);
+                    if (closest) {
+                        issues.push(`State "${stateValue}" is not a recognized Indian State. Did you mean "${closest}"?`);
+                    } else {
+                        issues.push(`State "${stateValue}" is not a recognized Indian State`);
+                    }
+                }
+            }
+        }
+
+        // Check for required Industries property
+        const hasIndustriesMapping = Object.values(mapping).includes("industries");
+        if (!hasIndustriesMapping) {
+            issues.push("Industries column mapping is missing (Industries is required)");
+        } else {
+            const industriesHeaderId = Object.keys(mapping).find(key => mapping[key] === "industries");
+            const industriesValue = String(row[industriesHeaderId] || "").trim();
+            if (!industriesValue) {
+                issues.push("Industries is required");
+            }
+        }
+
+        // Check for required Type property
+        const hasTypeMapping = Object.values(mapping).includes("type");
+        if (!hasTypeMapping) {
+            issues.push("Type column mapping is missing (Type is required)");
+        } else {
+            const typeHeaderId = Object.keys(mapping).find(key => mapping[key] === "type");
+            const typeValue = String(row[typeHeaderId] || "").trim();
+            if (!typeValue) {
+                issues.push("Type is required");
+            }
         }
 
         // Check format validations
@@ -277,6 +509,32 @@ export function BulkEditCompaniesPage({ onBack }) {
             } else if (fieldKey === "contact_number" || fieldKey.toLowerCase().includes("mobile") || fieldKey.toLowerCase().includes("phone")) {
                 if (!contactNumberRegex.test(val)) {
                     issues.push(`Invalid Mobile/Phone Format for "${val}" (7-18 digits, optional +)`);
+                }
+            }
+        });
+
+        // Check property option validations
+        Object.entries(mapping).forEach(([headerId, fieldKey]) => {
+            if (!fieldKey || fieldKey === "id" || fieldKey === "company_name") return;
+            const val = String(row[headerId] || "").trim();
+            if (!val) return;
+
+            const prop = activeProperties.find(p => p.field_key === fieldKey);
+            if (prop && prop.options && prop.options.length > 0) {
+                const validValues = prop.options.map(o => String(o.value || "").trim().toLowerCase());
+                const displayOptions = prop.options.map(o => String(o.value || "").trim()).join(", ");
+                
+                if (prop.is_multi_value || prop.object_type === "multiselect") {
+                    const inputVals = val.split(",").map(v => v.trim());
+                    for (const iv of inputVals) {
+                        if (iv && !validValues.includes(iv.toLowerCase())) {
+                            issues.push(`"${iv}" is not a valid option for ${prop.name}. Choose from: [${displayOptions}]`);
+                        }
+                    }
+                } else {
+                    if (!validValues.includes(val.toLowerCase())) {
+                        issues.push(`"${val}" is not a valid option for ${prop.name}. Choose from: [${displayOptions}]`);
+                    }
                 }
             }
         });
@@ -525,17 +783,58 @@ export function BulkEditCompaniesPage({ onBack }) {
                                             <option value="company_name">Company Name *</option>
                                             {activeProperties
                                                 .filter(p => p.field_key !== "company_name" && p.field_key.toLowerCase() !== "comapanyname")
-                                                .map(p => (
-                                                    <option key={p.id} value={p.field_key}>{p.name}</option>
-                                                ))
+                                                .map(p => {
+                                                    const isRequired = ["city", "state", "industries", "type"].includes(p.field_key);
+                                                    return (
+                                                        <option key={p.id} value={p.field_key}>
+                                                            {p.name}{isRequired ? " *" : ""}
+                                                        </option>
+                                                    );
+                                                })
                                             }
                                         </select>
                                     </div>
                                 </div>
                             ))}
                         </div>
+                        {(!isCompanyNameMapped || !isCityMapped || !isStateMapped || !isIndustriesMapped || !isTypeMapped) && (
+                            <div style={{
+                                padding: "12px 16px",
+                                background: "#fef2f2",
+                                border: "1px solid #fee2e2",
+                                borderRadius: "6px",
+                                color: "#991b1b",
+                                fontSize: "13px",
+                                fontWeight: "600",
+                                display: "flex",
+                                alignItems: "center",
+                                gap: "8px",
+                                marginBottom: "16px"
+                            }}>
+                                <AlertCircle size={16} style={{ flexShrink: 0 }} />
+                                <span>
+                                    Required mapping(s) missing: {[
+                                        !isCompanyNameMapped && "Company Name",
+                                        !isCityMapped && "City",
+                                        !isStateMapped && "State",
+                                        !isIndustriesMapped && "Industries",
+                                        !isTypeMapped && "Type"
+                                    ].filter(Boolean).join(", ")}. <em>(The "Next: Preview Data" button is disabled because these required columns are not mapped. If these columns are missing in your CSV file, please add them to your CSV and re-upload.)</em>
+                                </span>
+                            </div>
+                        )}
                         <div className="modal-actions">
-                            <button className="icon-button" onClick={() => setStep(2)}>
+                            <button
+                                className="icon-button"
+                                onClick={() => setStep(2)}
+                                disabled={!isCompanyNameMapped || !isCityMapped || !isStateMapped || !isIndustriesMapped || !isTypeMapped}
+                                style={(!isCompanyNameMapped || !isCityMapped || !isStateMapped || !isIndustriesMapped || !isTypeMapped) ? {
+                                    opacity: 0.5,
+                                    cursor: "not-allowed",
+                                    backgroundColor: "#cbd5e1",
+                                    color: "#64748b"
+                                } : {}}
+                            >
                                 Next: Preview Data
                                 <ChevronRight size={16} />
                             </button>
@@ -624,6 +923,7 @@ export function BulkEditCompaniesPage({ onBack }) {
                                 <thead>
                                     <tr>
                                         <th>Status</th>
+                                        <th style={{ minWidth: "220px" }}>Validation Summary</th>
                                         {csvData.headers.map(h => mapping[h.id] && <th key={h.id}>{h.label}</th>)}
                                         <th style={{ minWidth: "200px" }}>Changes / Differences</th>
                                         <th>Actions</th>
@@ -657,6 +957,19 @@ export function BulkEditCompaniesPage({ onBack }) {
                                                                <span className="badge-new" style={{ fontSize: "10px", padding: "2px 4px", borderRadius: "4px", backgroundColor: "#dcfce7", color: "#15803d", fontWeight: "bold", whiteSpace: "nowrap" }}>New Company</span>
                                                           )}
                                                      </div>
+                                                </td>
+                                                <td className="issues-column">
+                                                    {isValid ? (
+                                                        <span className="success-stats-text" style={{ fontSize: "12px", fontWeight: "600", color: "#16a34a" }}>Validation cleared! Ready to update.</span>
+                                                    ) : (
+                                                        <ul className="issues-list">
+                                                            {issues.map((issue, idx) => (
+                                                                <li key={idx} className="issue-item">
+                                                                    <span>• {issue}</span>
+                                                                </li>
+                                                            ))}
+                                                        </ul>
+                                                    )}
                                                 </td>
                                                 {csvData.headers.map(h => {
                                                     const fieldKey = mapping[h.id];
@@ -695,26 +1008,7 @@ export function BulkEditCompaniesPage({ onBack }) {
                                                             className={`${isDuplicate ? "cell-duplicate" : ""} ${isEditing ? "cell-editing" : ""}`}
                                                             onDoubleClick={() => setEditingCell({ rowIndex: actualIdx, headerId: h.id })}
                                                         >
-                                                            {isEditing ? (
-                                                                <input
-                                                                    autoFocus
-                                                                    className="cell-input"
-                                                                    value={val}
-                                                                    onChange={(e) => updateCell(actualIdx, h.id, e.target.value)}
-                                                                    onBlur={(e) => {
-                                                                        updateCell(actualIdx, h.id, sanitizeValue(e.target.value));
-                                                                        setEditingCell(null);
-                                                                    }}
-                                                                    onKeyDown={(e) => {
-                                                                        if (e.key === "Enter") {
-                                                                            updateCell(actualIdx, h.id, sanitizeValue(e.target.value));
-                                                                            setEditingCell(null);
-                                                                        }
-                                                                    }}
-                                                                />
-                                                            ) : (
-                                                                <span className="cell-text">{val || <em className="muted">blank</em>}</span>
-                                                            )}
+                                                            {renderCellEditor(actualIdx, h, val, row, fieldKey)}
                                                         </td>
                                                     );
                                                 })}
@@ -882,26 +1176,7 @@ export function BulkEditCompaniesPage({ onBack }) {
                                                             className={`${isDuplicate ? "cell-duplicate" : ""} ${isEditing ? "cell-editing" : ""}`}
                                                             onDoubleClick={() => setEditingCell({ rowIndex: actualIdx, headerId: h.id })}
                                                         >
-                                                            {isEditing ? (
-                                                                <input
-                                                                    autoFocus
-                                                                    className="cell-input"
-                                                                    value={val}
-                                                                    onChange={(e) => updateCell(actualIdx, h.id, e.target.value)}
-                                                                    onBlur={(e) => {
-                                                                        updateCell(actualIdx, h.id, sanitizeValue(e.target.value));
-                                                                        setEditingCell(null);
-                                                                    }}
-                                                                    onKeyDown={(e) => {
-                                                                        if (e.key === "Enter") {
-                                                                            updateCell(actualIdx, h.id, sanitizeValue(e.target.value));
-                                                                            setEditingCell(null);
-                                                                        }
-                                                                    }}
-                                                                />
-                                                            ) : (
-                                                                <span className="cell-text">{val || <em className="muted">blank</em>}</span>
-                                                            )}
+                                                            {renderCellEditor(actualIdx, h, val, row, fieldKey)}
                                                         </td>
                                                     );
                                                 })}

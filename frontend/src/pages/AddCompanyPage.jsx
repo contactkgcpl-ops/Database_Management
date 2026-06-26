@@ -13,12 +13,64 @@ function isMultiSelectProperty(property) {
   return property?.object_type === "multiselect";
 }
 
+function levenshtein(a, b) {
+  const tmp = [];
+  for (let i = 0; i <= a.length; i++) tmp[i] = [i];
+  for (let j = 0; j <= b.length; j++) tmp[0][j] = j;
+  for (let i = 1; i <= a.length; i++) {
+    for (let j = 1; j <= b.length; j++) {
+      tmp[i][j] = Math.min(
+        tmp[i - 1][j] + 1,
+        tmp[i][j - 1] + 1,
+        tmp[i - 1][j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1)
+      );
+    }
+  }
+  return tmp[a.length][b.length];
+}
+
+function getClosestCity(typed, cityList) {
+  if (!typed || !cityList.length) return "";
+  const target = typed.toLowerCase().trim();
+  
+  const subMatch = cityList.find(c => c.toLowerCase().startsWith(target) || c.toLowerCase().includes(target));
+  if (subMatch) return subMatch;
+  
+  let best = "";
+  let minDistance = 999;
+  for (const city of cityList) {
+    const dist = levenshtein(target, city.toLowerCase());
+    if (dist < minDistance && dist <= 3) {
+      minDistance = dist;
+      best = city;
+    }
+  }
+  return best;
+}
+
 export function AddCompanyPage({ onBack, editingId }) {
   const notify = useNotify();
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState([]);
+  const [stateCityMapping, setStateCityMapping] = useState({});
   
   const [fieldValues, setFieldValues] = useState({ company_name: "" });
+
+  useEffect(() => {
+    fetch("https://raw.githubusercontent.com/sab99r/Indian-States-And-Districts/master/states-and-districts.json")
+      .then(res => res.json())
+      .then(data => {
+        const mapping = {};
+        if (data && Array.isArray(data.states)) {
+          data.states.forEach(s => {
+            const stateName = s.state.trim().toLowerCase();
+            mapping[stateName] = s.districts;
+          });
+          setStateCityMapping(mapping);
+        }
+      })
+      .catch(err => console.error("Failed to load states/districts data dynamically", err));
+  }, []);
 
   useEffect(() => {
     async function loadData() {
@@ -226,15 +278,108 @@ export function AddCompanyPage({ onBack, editingId }) {
                     ))}
                   </select>
                 ) : (
-                  <div className="crm-search small">
-                    <Tag size={16} />
-                    <input
-                      required={prop.is_required}
-                      type={prop.object_type === "number" ? "number" : prop.object_type === "date" ? "date" : "text"}
-                      value={val}
-                      onChange={(e) => handleValueChange(prop.field_key, e.target.value)}
-                      placeholder={`Enter ${prop.name}`}
-                    />
+                  <div className="stack" style={{ gap: "4px", width: "100%" }}>
+                    <div className="crm-search small">
+                      <Tag size={16} />
+                      <input
+                        required={prop.is_required}
+                        type={prop.object_type === "number" ? "number" : prop.object_type === "date" ? "date" : "text"}
+                        value={val}
+                        onChange={(e) => handleValueChange(prop.field_key, e.target.value)}
+                        placeholder={`Enter ${prop.name}`}
+                        list={
+                          prop.field_key === "city" && fieldValues["state"] && stateCityMapping[String(fieldValues["state"]).trim().toLowerCase()]
+                            ? "city-suggestions"
+                            : (prop.field_key === "state" ? "state-suggestions" : undefined)
+                        }
+                      />
+                    </div>
+                    {prop.field_key === "state" && Object.keys(stateCityMapping).length > 0 && (() => {
+                      const typedState = String(val).trim();
+                      if (!typedState) return null;
+                      
+                      const isValid = stateCityMapping[typedState.toLowerCase()] !== undefined;
+                      if (isValid) return null;
+                      
+                      const availableStates = Object.keys(stateCityMapping).map(s => s.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" "));
+                      const closest = getClosestCity(typedState, availableStates);
+                      return (
+                        <div style={{ color: "#d97706", fontSize: "11px", display: "flex", flexDirection: "column", gap: "2px", paddingLeft: "8px" }}>
+                          <span>⚠️ "{typedState}" is not a recognized Indian State.</span>
+                          {closest && (
+                            <button
+                              type="button"
+                              onClick={() => handleValueChange("state", closest)}
+                              style={{
+                                background: "none",
+                                border: "none",
+                                color: "#176b5b",
+                                cursor: "pointer",
+                                fontSize: "11.5px",
+                                padding: 0,
+                                textDecoration: "underline",
+                                textAlign: "left",
+                                width: "max-content",
+                                fontWeight: "600"
+                              }}
+                            >
+                              Did you mean: "{closest}"?
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
+                    {prop.field_key === "city" && fieldValues["state"] && (() => {
+                      const selectedState = String(fieldValues["state"]).trim();
+                      const stateKey = selectedState.toLowerCase();
+                      const availableCities = stateCityMapping[stateKey];
+                      if (!availableCities || !val) return null;
+                      
+                      const isValid = availableCities.some(c => c.toLowerCase() === val.trim().toLowerCase());
+                      if (isValid) return null;
+                      
+                      const closest = getClosestCity(val, availableCities);
+                      return (
+                        <div style={{ color: "#d97706", fontSize: "11px", display: "flex", flexDirection: "column", gap: "2px", paddingLeft: "8px" }}>
+                          <span>⚠️ "{val}" is not in the district list of {selectedState}.</span>
+                          {closest && (
+                            <button
+                              type="button"
+                              onClick={() => handleValueChange("city", closest)}
+                              style={{
+                                background: "none",
+                                border: "none",
+                                color: "#176b5b",
+                                cursor: "pointer",
+                                fontSize: "11.5px",
+                                padding: 0,
+                                textDecoration: "underline",
+                                textAlign: "left",
+                                width: "max-content",
+                                fontWeight: "600"
+                              }}
+                            >
+                              Did you mean: "{closest}"?
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })()}
+                    {prop.field_key === "state" && Object.keys(stateCityMapping).length > 0 && (
+                      <datalist id="state-suggestions">
+                        {Object.keys(stateCityMapping).map(state => {
+                          const displayState = state.split(" ").map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
+                          return <option key={state} value={displayState} />;
+                        })}
+                      </datalist>
+                    )}
+                    {prop.field_key === "city" && fieldValues["state"] && stateCityMapping[String(fieldValues["state"]).trim().toLowerCase()] && (
+                      <datalist id="city-suggestions">
+                        {stateCityMapping[String(fieldValues["state"]).trim().toLowerCase()].map(c => (
+                          <option key={c} value={c} />
+                        ))}
+                      </datalist>
+                    )}
                   </div>
                 )}
               </div>

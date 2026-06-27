@@ -1,8 +1,8 @@
 from datetime import date, datetime
 import json
 import logging
-from apscheduler.schedulers.background import BackgroundScheduler
-from apscheduler.triggers.cron import CronTrigger
+import threading
+import time
 from sqlalchemy.orm import Session
 from app.db import SessionLocal
 from app.models import EmailReportConfig, EmailReportLog
@@ -13,7 +13,51 @@ from app.modules.email_reports.mailer import send_outlook_email
 logger = logging.getLogger("email_reports_scheduler")
 logger.setLevel(logging.INFO)
 
-scheduler = BackgroundScheduler()
+class DailyReportScheduler:
+    def __init__(self):
+        self._thread = None
+        self._stop_event = threading.Event()
+        self.running = False
+        
+        self.config_hour = 20
+        self.config_minute = 0
+        self.is_active = False
+        self._last_run_date = None
+
+    def start(self):
+        if not self.running:
+            self.running = True
+            self._stop_event.clear()
+            self._thread = threading.Thread(target=self._loop, name="DailyReportSchedulerThread", daemon=True)
+            self._thread.start()
+            logger.info("Custom background scheduler started.")
+
+    def stop(self):
+        self._stop_event.set()
+        self.running = False
+
+    def update_config(self, hour: int, minute: int, is_active: bool):
+        self.config_hour = hour
+        self.config_minute = minute
+        self.is_active = is_active
+        logger.info(f"Scheduler configuration updated: run at {hour:02d}:{minute:02d}, active={is_active}")
+
+    def _loop(self):
+        while not self._stop_event.is_set():
+            try:
+                now = datetime.now()
+                if self.is_active:
+                    if now.hour == self.config_hour and now.minute == self.config_minute:
+                        today_date = date.today()
+                        if self._last_run_date != today_date:
+                            self._last_run_date = today_date
+                            logger.info("Time matches and task has not run today yet. Executing task...")
+                            threading.Thread(target=send_daily_report_task, daemon=True).start()
+            except Exception as e:
+                logger.error(f"Error in scheduler loop: {e}")
+            time.sleep(10)
+
+scheduler = DailyReportScheduler()
 
 def send_daily_report_task():
     logger.info("Executing scheduled daily email report task...")
@@ -30,6 +74,15 @@ def send_daily_report_task():
             return
             
         today = date.today()
+        # Check if already sent today
+        already_sent = db.query(EmailReportLog).filter(
+            EmailReportLog.report_date == today,
+            EmailReportLog.status == "success"
+        ).first()
+        if already_sent:
+            logger.info(f"Daily report already sent successfully for {today}. Skipping.")
+            return
+
         logger.info(f"Generating daily activity report for date: {today}")
         data = get_report_data(db, today)
         excel_bytes = generate_excel_report(data, today)
@@ -75,15 +128,12 @@ def send_daily_report_task():
         db.close()
 
 def start_scheduler():
-    if not scheduler.running:
-        scheduler.start()
-        logger.info("APScheduler Background Scheduler started.")
-        
-        db = SessionLocal()
-        try:
-            reschedule_report_job(db)
-        finally:
-            db.close()
+    scheduler.start()
+    db = SessionLocal()
+    try:
+        reschedule_report_job(db)
+    finally:
+        db.close()
 
 def reschedule_report_job(db: Session):
     config = db.query(EmailReportConfig).first()
@@ -101,12 +151,6 @@ def reschedule_report_job(db: Session):
         db.commit()
         db.refresh(config)
         
-    try:
-        scheduler.remove_job("daily_email_report")
-        logger.info("Removed existing scheduled job.")
-    except Exception:
-        pass
-        
     if config.is_active:
         try:
             time_parts = config.schedule_time.split(":")
@@ -116,13 +160,6 @@ def reschedule_report_job(db: Session):
             logger.error(f"Invalid schedule time format: {config.schedule_time}. Defaulting to 20:00.")
             hour, minute = 20, 0
             
-        trigger = CronTrigger(hour=hour, minute=minute)
-        scheduler.add_job(
-            send_daily_report_task,
-            trigger=trigger,
-            id="daily_email_report",
-            replace_existing=True
-        )
-        logger.info(f"Scheduled new daily report job to run at {hour:02d}:{minute:02d} local time.")
+        scheduler.update_config(hour, minute, True)
     else:
-        logger.info("Scheduled job not added because email report config is inactive.")
+        scheduler.update_config(20, 0, False)

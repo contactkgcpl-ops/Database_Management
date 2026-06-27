@@ -55,19 +55,22 @@ def startup() -> None:
             db.execute(text("ALTER TABLE email_report_logs ADD COLUMN recipients TEXT"))
             db.commit()
         except Exception:
-            pass
+            db.rollback()
         # Migrate lead_manage multi-assign column
         try:
             db.execute(text("ALTER TABLE lead_manage ADD COLUMN assigned_to_ids TEXT"))
             db.commit()
+        except Exception:
+            db.rollback()
+        try:
             # Back-fill existing single assignments into the new column
             db.execute(text(
-                "UPDATE lead_manage SET assigned_to_ids = CAST(assigned_to_id AS TEXT) "
+                "UPDATE lead_manage SET assigned_to_ids = CAST(assigned_to_id AS CHAR) "
                 "WHERE assigned_to_id IS NOT NULL AND (assigned_to_ids IS NULL OR assigned_to_ids = '')"
             ))
             db.commit()
         except Exception:
-            pass
+            db.rollback()
         # Start the scheduler
         start_scheduler()
     finally:

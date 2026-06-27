@@ -25,6 +25,8 @@ def list_companies(
     sort_key: str | None = None,
     sort_dir: str | None = None,
     filters: dict | None = None,
+    current_user: User | None = None,
+    for_assign_leads: bool = False,
 ) -> tuple[list[Company], int]:
     from app.models import LeadManage, CompanyPropertyValue, Property, User
     from sqlalchemy.orm import aliased
@@ -38,6 +40,31 @@ def list_companies(
     
     query = query.outerjoin(AssignedUser, LeadManage.assigned_to_id == AssignedUser.id)\
                  .outerjoin(AssignedByUser, LeadManage.assigned_by_id == AssignedByUser.id)
+
+    # Filter by user assigned companies for all users (including Admin)
+    if current_user:
+        sub_ids = []
+        queue = [current_user.id]
+        visited = {current_user.id}
+        while queue:
+            curr = queue.pop(0)
+            children = db.query(User.id).filter(User.parent_id == curr).all()
+            for r in children:
+                if r.id not in visited:
+                    visited.add(r.id)
+                    sub_ids.append(r.id)
+                    queue.append(r.id)
+        
+        allowed_user_ids = [current_user.id] + sub_ids
+        
+        or_conds = []
+        for uid in allowed_user_ids:
+            uid_str = str(uid)
+            or_conds.append(text(f"companies.company = '{uid_str}'"))
+            or_conds.append(text(f"companies.company LIKE '{uid_str},%'"))
+            or_conds.append(text(f"companies.company LIKE '%,{uid_str}'"))
+            or_conds.append(text(f"companies.company LIKE '%,{uid_str},%'"))
+        query = query.filter(or_(*or_conds))
     
     # 1. Search Query (q) on company_name
     if q:

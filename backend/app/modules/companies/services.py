@@ -41,8 +41,8 @@ def list_companies(
     query = query.outerjoin(AssignedUser, LeadManage.assigned_to_id == AssignedUser.id)\
                  .outerjoin(AssignedByUser, LeadManage.assigned_by_id == AssignedByUser.id)
 
-    # Filter by user assigned companies for all users (including Admin)
-    if current_user:
+    # Filter by user assigned companies for all users (including Admin) only if on assign leads page
+    if for_assign_leads and current_user:
         sub_ids = []
         queue = [current_user.id]
         visited = {current_user.id}

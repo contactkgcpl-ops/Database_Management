@@ -11,13 +11,23 @@ from app.models import (
     LeaveRequest,
     OurCompany,
     EmailReportConfig,
-    EmailReportLog
+    EmailReportLog,
+    Property
 )
 
 def get_report_data(db: Session, target_date: date):
     # 1. Fetch Our Companies
     our_companies = db.query(OurCompany).all()
     our_companies_map = {oc.id: oc.name for oc in our_companies}
+    
+    # Pre-fetch dynamic columns from companies table
+    companies_raw = db.execute(text("SELECT id, city, industries, company FROM companies")).mappings().all()
+    company_dynamic_map = {row["id"]: row for row in companies_raw}
+
+    # Fetch contact number property ID dynamically
+    contact_prop_id = db.execute(
+        text("SELECT id FROM properties WHERE field_key = 'contact_number' AND is_active = 1")
+    ).scalar() or 36
     
     # 2. Fetch all active users
     users = db.query(User).filter(User.is_active == True).all()
@@ -82,17 +92,21 @@ def get_report_data(db: Session, target_date: date):
         
         contact_number = ""
         contact_number_val = db.execute(
-            text("SELECT value FROM company_property_values WHERE company_id = :cid AND property_id = 36"),
-            {"cid": comp.id}
+            text("SELECT value FROM company_property_values WHERE company_id = :cid AND property_id = :pid"),
+            {"cid": comp.id, "pid": contact_prop_id}
         ).scalar()
         if contact_number_val:
             contact_number = contact_number_val
             
+        raw_comp = company_dynamic_map.get(comp.id)
+        city = raw_comp["city"] if raw_comp and raw_comp["city"] is not None else ""
+        industry = raw_comp["industries"] if raw_comp and raw_comp["industries"] is not None else ""
+
         company_activities.append({
             "company_name": comp.company_name,
             "contact_number": contact_number,
-            "city": getattr(comp, "city", "") or "",
-            "industry": getattr(comp, "industries", "") or "",
+            "city": city,
+            "industry": industry,
             "connected_via": h.new_value or "Call",
             "response": h.remark or "No remark",
             "last_activity_time": h.created_at.strftime("%I:%M %p"),
@@ -153,7 +167,12 @@ def get_report_data(db: Session, target_date: date):
     # 8. Build Company-wise & User-wise Counts (Section A)
     oc_summary = []
     for oc_id, oc_name in our_companies_map.items():
-        oc_companies = [c for c in companies if oc_id in get_linked_oc_ids(getattr(c, "company", None))]
+        oc_companies = []
+        for c in companies:
+            raw_comp = company_dynamic_map.get(c.id)
+            comp_val = raw_comp["company"] if raw_comp else None
+            if oc_id in get_linked_oc_ids(comp_val):
+                oc_companies.append(c)
         if not oc_companies:
             continue
             
@@ -357,12 +376,14 @@ def get_report_data(db: Session, target_date: date):
                 continue
 
             # Find all client companies under this OurCompany assigned to this user or their subordinates
-            oc_companies = [
-                c for c in companies
-                if oc_id in get_linked_oc_ids(getattr(c, "company", None))
-                and lead_manage_map.get(c.id)
-                and lead_manage_map[c.id].assigned_to_id in subordinate_ids
-            ]
+            oc_companies = []
+            for c in companies:
+                raw_comp = company_dynamic_map.get(c.id)
+                comp_val = raw_comp["company"] if raw_comp else None
+                if oc_id in get_linked_oc_ids(comp_val) \
+                   and lead_manage_map.get(c.id) \
+                   and lead_manage_map[c.id].assigned_to_id in subordinate_ids:
+                    oc_companies.append(c)
 
             for comp in oc_companies:
                 lm = lead_manage_map.get(comp.id)
@@ -370,8 +391,9 @@ def get_report_data(db: Session, target_date: date):
                 assignee = users_map.get(assigned_uid) if assigned_uid else None
 
                 # City / Industry for this company
-                city = getattr(comp, "city", "") or "Unknown"
-                industry = getattr(comp, "industries", "") or "Unknown"
+                raw_comp = company_dynamic_map.get(comp.id)
+                city = (raw_comp["city"] if raw_comp and raw_comp["city"] is not None else "") or "Unknown"
+                industry = (raw_comp["industries"] if raw_comp and raw_comp["industries"] is not None else "") or "Unknown"
 
                 # Get all activities for this company by the assignee
                 comp_activities = [a for a in company_activities if a["company_id"] == comp.id and a["user_id"] == assigned_uid] if assigned_uid else []
@@ -491,17 +513,21 @@ def get_report_data(db: Session, target_date: date):
                     
                 contact_number = ""
                 contact_number_val = db.execute(
-                    text("SELECT value FROM company_property_values WHERE company_id = :cid AND property_id = 36"),
-                    {"cid": c.id}
+                    text("SELECT value FROM company_property_values WHERE company_id = :cid AND property_id = :pid"),
+                    {"cid": c.id, "pid": contact_prop_id}
                 ).scalar()
                 if contact_number_val:
                     contact_number = contact_number_val
                     
+                raw_comp = company_dynamic_map.get(c.id)
+                city = raw_comp["city"] if raw_comp and raw_comp["city"] is not None else ""
+                industry = raw_comp["industries"] if raw_comp and raw_comp["industries"] is not None else ""
+
                 pending_leads.append({
                     "company_name": c.company_name,
                     "contact_number": contact_number,
-                    "city": getattr(c, "city", "") or "",
-                    "industry": getattr(c, "industries", "") or "",
+                    "city": city,
+                    "industry": industry,
                     "assigned_at": assigned_at_str,
                     "days_pending": days_pending
                 })

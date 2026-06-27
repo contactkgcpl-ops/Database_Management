@@ -106,24 +106,7 @@ def close_day_log(db: Session, user: User) -> UserTimeLog:
     log.status = "completed"
     recalculate_log(log, current_time)
     
-    # Also stop any active task stopwatch timer for this user
-    from app.models import TaskTimerLog, TaskHistory
-    active_task_log = db.query(TaskTimerLog).filter(
-        TaskTimerLog.user_id == user.id,
-        TaskTimerLog.end_time == None
-    ).first()
-    if active_task_log:
-        active_task_log.end_time = current_time
-        active_task_log.work_description = "Auto-stopped on daily logout"
-        duration = current_time - active_task_log.start_time
-        duration_str = f"{duration.seconds // 3600}h {(duration.seconds % 3600) // 60}m"
-        history = TaskHistory(
-            task_id=active_task_log.task_id,
-            user_id=user.id,
-            action="timer_stopped",
-            details=f"Timer stopped (Duration: {duration_str}) [Auto-stopped on daily logout]"
-        )
-        db.add(history)
+
         
     db.commit()
     db.refresh(log)

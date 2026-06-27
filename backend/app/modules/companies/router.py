@@ -1,5 +1,6 @@
 import json
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import or_, text
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -31,8 +32,9 @@ def list_company_records(
     sort_key: str | None = None,
     sort_dir: str | None = None,
     filters: str | None = None,
+    for_assign_leads: bool = False,
     db: Session = Depends(get_db),
-    _: User = Depends(require_permission("companies.view")),
+    user: User = Depends(require_permission("companies.view")),
 ):
     parsed_filters = None
     if filters:
@@ -49,6 +51,8 @@ def list_company_records(
         sort_key=sort_key,
         sort_dir=sort_dir,
         filters=parsed_filters,
+        current_user=user,
+        for_assign_leads=for_assign_leads,
     )
     return {
         "companies": [to_company_out(db, company) for company in companies],
@@ -79,13 +83,34 @@ def list_my_leads(
     from app.models import LeadManage
     import traceback
     try:
-        child_ids = [row.id for row in db.query(User.id).filter(User.parent_id == user.id).all()]
-        allowed_user_ids = [user.id] + child_ids
+        # Get recursive subordinate IDs
+        sub_ids = []
+        queue = [user.id]
+        visited = set()
+        while queue:
+            curr = queue.pop(0)
+            if curr in visited:
+                continue
+            visited.add(curr)
+            children = db.query(User.id).filter(User.parent_id == curr).all()
+            for r in children:
+                sub_ids.append(r.id)
+                queue.append(r.id)
+        
+        allowed_user_ids = [user.id] + sub_ids
 
         query = db.query(Company).join(LeadManage, Company.id == LeadManage.company_id).filter(
-            LeadManage.assigned_to_id.in_(allowed_user_ids),
             LeadManage.is_inquiry != True
         )
+        
+        or_conds = []
+        for uid in allowed_user_ids:
+            uid_str = str(uid)
+            or_conds.append(text(f"companies.company = '{uid_str}'"))
+            or_conds.append(text(f"companies.company LIKE '{uid_str},%'"))
+            or_conds.append(text(f"companies.company LIKE '%,{uid_str}'"))
+            or_conds.append(text(f"companies.company LIKE '%,{uid_str},%'"))
+        query = query.filter(or_(*or_conds))
         if q:
             term = f"%{q.strip()}%"
             query = query.filter(Company.company_name.ilike(term))
@@ -178,6 +203,7 @@ def delete_company_record(
 def assign_company_record(
     company_id: int,
     user_id: int | None = None,
+    assigned_to_ids: str | None = None,   # comma-separated list of extra user IDs
     db: Session = Depends(get_db),
     user: User = Depends(require_any_permission("companies.manage", "leads.assign", "leads.my", "leads.followup")),
 ):
@@ -201,7 +227,17 @@ def assign_company_record(
             raise HTTPException(status_code=403, detail="You are not authorized to assign this lead.")
 
     company = assign_company(db, company, user_id, assigned_by_id=user.id)
+    
+    # If multi-select IDs were provided, update assigned_to_ids directly
+    if assigned_to_ids is not None:
+        from app.models import LeadManage
+        lm = db.query(LeadManage).filter(LeadManage.company_id == company_id).first()
+        if lm:
+            lm.assigned_to_ids = assigned_to_ids
+            db.commit()
+    
     return to_company_out(db, company)
+
 
 from app.schemas import InlinePropertyUpdate, LeadHistoryOut
 from app.modules.companies.services import update_property_inline, get_lead_history
@@ -226,10 +262,35 @@ def get_company_history_endpoint(
     user: User = Depends(require_any_permission("companies.view", "leads.my", "leads.assign"))
 ):
     history = get_lead_history(db, company_id)
-    return [{
-        **h.__dict__,
-        "user_name": h.user.name if h.user else None
-    } for h in history]
+    ret = []
+    for h in history:
+        old_val = h.old_value
+        new_val = h.new_value
+        if h.property_key == "company":
+            from app.modules.companies.services import get_user_names_by_ids
+            old_val = get_user_names_by_ids(db, h.old_value)
+            new_val = get_user_names_by_ids(db, h.new_value)
+        elif h.property_key == "assigned_to":
+            from app.modules.companies.services import get_user_names_by_ids
+            if h.old_value and h.old_value.strip().isdigit():
+                old_val = get_user_names_by_ids(db, h.old_value)
+            if h.new_value and h.new_value.strip().isdigit():
+                new_val = get_user_names_by_ids(db, h.new_value)
+
+        ret.append({
+            "id": h.id,
+            "company_id": h.company_id,
+            "property_key": h.property_key,
+            "property_name": h.property_name,
+            "old_value": old_val,
+            "new_value": new_val,
+            "remark": h.remark,
+            "user_id": h.user_id,
+            "created_at": h.created_at,
+            "updated_at": h.updated_at,
+            "user_name": h.user.name if h.user else None
+        })
+    return ret
 
 
 @router.post("/bulk-delete")

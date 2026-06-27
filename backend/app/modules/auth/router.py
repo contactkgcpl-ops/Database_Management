@@ -22,6 +22,7 @@ def serialize_user(user: User) -> UserOut:
         profile_image_url=user.profile_image_url,
         role_name=user.role.name if user.role else None,
         permissions=user_permission_codes(user),
+        company_ids=user.company_ids,
     )
 
 

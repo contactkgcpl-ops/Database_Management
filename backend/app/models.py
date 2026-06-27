@@ -55,6 +55,7 @@ class User(Base, TimestampMixin):
     role_id: Mapped[int | None] = mapped_column(ForeignKey("roles.id"))
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     profile_image_url: Mapped[str | None] = mapped_column(Text)
+    company_ids: Mapped[str | None] = mapped_column(Text)
     role: Mapped[Role | None] = relationship(back_populates="users")
     parent: Mapped["User | None"] = relationship(remote_side=[id])
 
@@ -155,6 +156,7 @@ class LeadManage(Base, TimestampMixin):
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     company_id: Mapped[int] = mapped_column(ForeignKey("companies.id", ondelete="CASCADE"), index=True)
     assigned_to_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
+    assigned_to_ids: Mapped[str | None] = mapped_column(Text, nullable=True)  # comma-separated multi-assign user IDs
     assigned_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"), index=True)
     status: Mapped[str | None] = mapped_column(Text)
     is_inquiry: Mapped[bool] = mapped_column(Boolean, default=False, server_default="0")
@@ -516,6 +518,32 @@ class OurCompany(Base, TimestampMixin):
     phone: Mapped[str | None] = mapped_column(String(50))
     address: Mapped[str | None] = mapped_column(Text)
     status: Mapped[str] = mapped_column(String(20), default="Active")
+
+
+class EmailReportConfig(Base, TimestampMixin):
+    __tablename__ = "email_report_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    smtp_host: Mapped[str] = mapped_column(String(255))
+    smtp_port: Mapped[int] = mapped_column(Integer, default=587)
+    smtp_user: Mapped[str] = mapped_column(String(255))
+    smtp_password: Mapped[str] = mapped_column(String(255))
+    to_emails: Mapped[str] = mapped_column(Text)  # JSON list of recipient emails
+    schedule_time: Mapped[str] = mapped_column(String(10), default="20:00")  # e.g., "20:00"
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+
+class EmailReportLog(Base, TimestampMixin):
+    __tablename__ = "email_report_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    report_date: Mapped[date] = mapped_column(Date, index=True)
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    status: Mapped[str] = mapped_column(String(50))  # success / failed
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    recipients_count: Mapped[int] = mapped_column(Integer, default=0)
+    recipients: Mapped[str | None] = mapped_column(Text, nullable=True)
+
 
 
 

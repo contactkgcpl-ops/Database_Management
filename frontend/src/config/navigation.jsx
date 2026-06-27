@@ -9,6 +9,8 @@ export const navigation = [
     children: [
       { key: "users", label: "User", icon: Users, page: "users", permission: "users.manage" },
       { key: "roles", label: "Role", icon: Shield, page: "roles", permission: "roles.manage" },
+      { key: "our-companies", label: "Our Companies", icon: Building2, page: "our-companies", permission: "our_companies.view" },
+      { key: "properties", label: "Properties", icon: ListTree, page: "properties", permission: "properties.view" },
     ],
   },
   {
@@ -21,7 +23,6 @@ export const navigation = [
       { key: "assign-leads", label: "Assign Company", icon: Users, page: "assign-leads", permission: "leads.assign" },
     ],
   },
-  { key: "our-companies", label: "Our Companies", icon: Building2, page: "our-companies", permission: "our_companies.view" },
   {
     key: "marketing",
     label: "connection",
@@ -47,7 +48,7 @@ export const navigation = [
       { key: "vendors", label: "Vendors", icon: Users, page: "vendors", permission: "vendors.view" },
     ],
   },
-  { key: "properties", label: "Properties", icon: ListTree, page: "properties", permission: "properties.view" },
+
   {
     key: "time",
     label: "Time Tracking",
@@ -64,9 +65,7 @@ export const navigation = [
     label: "Staff Management",
     icon: Users,
     children: [
-      { key: "tasks", label: "Tasks", icon: ClipboardList, page: "tasks", permission: "tasks.view" },
       { key: "requirements", label: "Requirement", icon: ClipboardList, page: "requirements", permission: "requirement.view" },
-      { key: "staff-report", label: "Staff Report", icon: ClipboardList, page: "staff-report", permission: "tasks.report" },
     ],
   },
   {
@@ -81,10 +80,11 @@ export const navigation = [
   },
   {
     key: "tracking",
-    label: "Tracking",
+    label: "Tracking & Reporting",
     icon: ClipboardList,
     children: [
       { key: "connection-tracking", label: "Connection Tracking", icon: ClipboardList, page: "connection-tracking", permission: "tracking.view" },
+      { key: "activity-reports", label: "Activity Reports", icon: ClipboardList, page: "activity-reports", permission: "reports.view" },
     ],
   },
 ];

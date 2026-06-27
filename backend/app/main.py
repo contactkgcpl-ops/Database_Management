@@ -19,11 +19,12 @@ from app.modules.time_tracking import router as time_tracking
 from app.modules.dashboard import router as dashboard
 from app.modules.reporting import router as reporting
 from app.modules.chat import router as chat
-from app.modules.tasks import router as tasks
 from app.modules.vendors import router as vendors
 from app.modules.leave_management import router as leave_management
 from app.modules.our_companies import router as our_companies
 from app.modules.tracking import router as tracking
+from app.modules.email_reports import router as email_reports
+from app.modules.email_reports.scheduler import start_scheduler
 from app.seed import seed_defaults
 
 settings = get_settings()
@@ -49,6 +50,26 @@ def startup() -> None:
     try:
         migrate_all(db)
         seed_defaults(db)
+        # Migrate email_report_logs recipients column
+        try:
+            db.execute(text("ALTER TABLE email_report_logs ADD COLUMN recipients TEXT"))
+            db.commit()
+        except Exception:
+            pass
+        # Migrate lead_manage multi-assign column
+        try:
+            db.execute(text("ALTER TABLE lead_manage ADD COLUMN assigned_to_ids TEXT"))
+            db.commit()
+            # Back-fill existing single assignments into the new column
+            db.execute(text(
+                "UPDATE lead_manage SET assigned_to_ids = CAST(assigned_to_id AS TEXT) "
+                "WHERE assigned_to_id IS NOT NULL AND (assigned_to_ids IS NULL OR assigned_to_ids = '')"
+            ))
+            db.commit()
+        except Exception:
+            pass
+        # Start the scheduler
+        start_scheduler()
     finally:
         db.close()
 
@@ -70,9 +91,9 @@ app.include_router(time_tracking.router, prefix="/api")
 app.include_router(dashboard.router, prefix="/api")
 app.include_router(reporting.router, prefix="/api")
 app.include_router(chat.router, prefix="/api")
-app.include_router(tasks.router, prefix="/api")
 app.include_router(vendors.router, prefix="/api")
 app.include_router(leave_management.router, prefix="/api")
 app.include_router(our_companies.router, prefix="/api")
 app.include_router(tracking.router, prefix="/api")
+app.include_router(email_reports.router, prefix="/api")
 # trigger reload for schema migration

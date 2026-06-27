@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Columns3, FileUp, GripVertical, MoreVertical, Pencil, Plus, Ruler, Save, Search, Trash2, X, SquareCheckBig, History, Filter } from "lucide-react";
+import { Columns3, FileUp, GripVertical, MoreVertical, Pencil, Plus, Ruler, Save, Search, Trash2, X, SquareCheckBig, History, Filter, Download } from "lucide-react";
 import { GridFilterDropdown } from "../components/GridFilterDropdown";
 import { api } from "../api";
 import { useNotify } from "../components/NotificationProvider";
@@ -19,6 +19,8 @@ const COMPANY_STATIC_COLUMNS = [
   { id: -1, name: "Contact Created By", field_key: "created_by_name", grids: [{ grid_key: "companies", grid_width: 180, grid_order: -90 }] },
 ];
 
+let usersGlobal = [];
+
 function getCompanyPropertyValue(company, property) {
   if (property.field_key === "company_name") return company.company_name || "";
   if (property.field_key === "created_by_name") return company.created_by_name || "";
@@ -27,6 +29,13 @@ function getCompanyPropertyValue(company, property) {
 }
 
 function propertyOptions(property) {
+  if (property?.field_key === "company") {
+    const filteredUsers = usersGlobal.filter(u => u.company_ids && u.company_ids.trim());
+    return [
+      { value: "unassigned", label: "Unassigned Data" },
+      ...filteredUsers.map((u) => ({ label: u.name, value: String(u.id) }))
+    ];
+  }
   return (property?.options || [])
     .filter((option) => option.is_active !== false)
     .map((option) => ({ label: option.label, value: option.value }));
@@ -58,9 +67,19 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
   const { user } = useAuth();
   const handleInlineEdit = async (companyId, prop, value) => {
     try {
-      await api.updateCompanyInline(companyId, { property_id: prop.id, value });
+      const updated = await api.updateCompanyInline(companyId, { property_id: prop.id, value });
       notify("Updated successfully", "success");
-      companies.reload();
+      companies.setData((prev) => {
+        if (Array.isArray(prev)) {
+          return prev.map((c) => (c.id === companyId ? updated : c));
+        } else if (prev && typeof prev === "object") {
+          return {
+            ...prev,
+            companies: (prev.companies || []).map((c) => (c.id === companyId ? updated : c)),
+          };
+        }
+        return prev;
+      });
     } catch (err) { }
   };
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
@@ -140,6 +159,8 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
   const properties = useLoad(() => api.properties(), []);
   const propertyGrids = useLoad(() => api.propertyGrids(), []);
   const geoData = useLoad(() => api.statesAndCities(), []);
+  const users = useLoad(() => api.users(), []);
+  usersGlobal = users.data || [];
 
   const companyGridKey = propertyGrids.data[0]?.key || "companies";
   const activeProperties = properties.data.filter((property) => property.is_active);
@@ -252,6 +273,63 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
     properties.reload();
   };
 
+  const handleExport = async () => {
+    try {
+      notify("Export started...", "info");
+      // Fetch all matching companies with filters applied, bypassing pagination logic
+      const res = await api.companies({
+        page: 1,
+        page_size: 100000,
+        q,
+        sort_key: companySort.key,
+        sort_dir: companySort.direction,
+        filters: serializedFilters
+      });
+
+      const allCompanies = res?.companies || [];
+      if (!allCompanies.length) {
+        notify("No companies found to export", "error");
+        return;
+      }
+
+      // Prepare CSV content using active grid columns
+      const headers = gridProperties.map(p => p.name);
+      const csvRows = [headers.map(h => `"${h.replace(/"/g, '""')}"`).join(",")];
+
+      allCompanies.forEach(c => {
+        const row = gridProperties.map(p => {
+          let val = "";
+          if (p.field_key === "company_name") {
+            val = getCompanyPropertyValue(c, p);
+          } else if (p.field_key === "company" || p.options?.length) {
+            val = formatPropertyValue(p, getCompanyPropertyValue(c, p));
+          } else {
+            val = getCompanyPropertyValue(c, p);
+          }
+          val = String(val || "").trim();
+          return `"${val.replace(/"/g, '""')}"`;
+        });
+        csvRows.push(row.join(","));
+      });
+
+      const csvString = csvRows.join("\n");
+      const blob = new Blob([csvString], { type: "text/csv;charset=utf-8;" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.setAttribute("download", `companies_export_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      notify("Export completed successfully", "success");
+    } catch (err) {
+      console.error(err);
+      notify("Failed to export companies", "error");
+    }
+  };
+
   return (
     <div className="stack">
       <div className="toolbar split-toolbar">
@@ -295,6 +373,7 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
                 </button>
                 <button type="button" className="icon-button compact-primary" onClick={() => setPage("add-company")}><Plus size={16} /> Add Company</button>
                 <button type="button" className="secondary icon-button" onClick={() => setPage("import-companies")}><FileUp size={16} /> Import</button>
+                <button type="button" className="secondary icon-button" onClick={handleExport}><Download size={16} /> Export</button>
                 <button type="button" className="secondary icon-button" onClick={() => setPage("bulk-edit-companies")}><FileUp size={16} /> Edit Bulk Company</button>
                 <button type="button" className="secondary icon-only menu-trigger" onClick={() => setActionsMenuOpen(!actionsMenuOpen)}><MoreVertical size={18} /></button>
                 {actionsMenuOpen && (
@@ -563,10 +642,45 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
                                   </button>
                                 )}
                               </div>
+                            ) : (p.object_type === "multiselect" && p.field_key !== "type" && (p.field_key !== "company" || canManage)) ? (
+                              <div className="inline-multi-select" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                <GridFilterDropdown
+                                  label={formatPropertyValue(p, getCompanyPropertyValue(c, p)) || "-"}
+                                  options={propertyOptions(p)}
+                                  value={splitMultiValue(getCompanyPropertyValue(c, p))}
+                                  onChange={(next) => {
+                                    let filtered = next;
+                                    if (p.field_key === "company") {
+                                      const hasUnassigned = next.includes("unassigned");
+                                      const hadUnassigned = splitMultiValue(getCompanyPropertyValue(c, p)).includes("unassigned");
+                                      if (hasUnassigned && !hadUnassigned) {
+                                        filtered = ["unassigned"];
+                                      } else if (hasUnassigned && next.length > 1) {
+                                        filtered = next.filter(v => v !== "unassigned");
+                                      }
+                                    }
+                                    handleInlineEdit(c.id, p, filtered.join(","));
+                                  }}
+                                  isMulti={true}
+                                  showSaveButton={true}
+                                />
+                                {c.history_keys?.includes(p.field_key) && (
+                                  <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, p.field_key)} title={`View ${p.name} History`} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
+                                    <History size={14} style={{ color: "#64748b" }} />
+                                  </button>
+                                )}
+                              </div>
                             ) : (
-                              <span className="cell-text" title={getCompanyPropertyValue(c, p)}>
-                                {p.field_key === "company_name" ? <strong>{getCompanyPropertyValue(c, p)}</strong> : (p.options?.length ? formatPropertyValue(p, getCompanyPropertyValue(c, p)) : getCompanyPropertyValue(c, p))}
-                              </span>
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span className="cell-text" title={getCompanyPropertyValue(c, p)}>
+                                  {p.field_key === "company_name" ? <strong>{getCompanyPropertyValue(c, p)}</strong> : (p.field_key === "company" || p.options?.length ? formatPropertyValue(p, getCompanyPropertyValue(c, p)) : getCompanyPropertyValue(c, p))}
+                                </span>
+                                {p.field_key === "company" && c.history_keys?.includes(p.field_key) && (
+                                  <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, p.field_key)} title={`View ${p.name} History`} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
+                                    <History size={14} style={{ color: "#64748b" }} />
+                                  </button>
+                                )}
+                              </div>
                             )}
                           </td>
                         ))}

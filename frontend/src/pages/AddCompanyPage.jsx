@@ -3,6 +3,7 @@ import { Plus, X, Save, ArrowLeft, Building2, Tag } from "lucide-react";
 import { api } from "../api";
 import { MultiSelect } from "../components/MultiSelect";
 import { useNotify } from "../components/NotificationProvider";
+import { useAuth } from "../context/AuthContext";
 
 const emptyForm = {
   company_name: "",
@@ -50,9 +51,12 @@ function getClosestCity(typed, cityList) {
 
 export function AddCompanyPage({ onBack, editingId }) {
   const notify = useNotify();
+  const { user } = useAuth();
+  const canManage = user?.permissions?.includes("companies.manage");
   const [loading, setLoading] = useState(false);
   const [properties, setProperties] = useState([]);
   const [stateCityMapping, setStateCityMapping] = useState({});
+  const [usersList, setUsersList] = useState([]);
   
   const [fieldValues, setFieldValues] = useState({ company_name: "" });
 
@@ -75,11 +79,13 @@ export function AddCompanyPage({ onBack, editingId }) {
   useEffect(() => {
     async function loadData() {
       try {
-        const [propsRes, companyRes] = await Promise.all([
+        const [propsRes, companyRes, usersRes] = await Promise.all([
           api.properties(),
-          editingId ? api.company(editingId) : null
+          editingId ? api.company(editingId) : null,
+          api.users()
         ]);
 
+        setUsersList(usersRes || []);
         const activeProps = propsRes.filter((p) => p.is_active);
 
         // Sort sequence: Single Line -> Multi Line (textarea) -> Multi Select
@@ -208,12 +214,39 @@ export function AddCompanyPage({ onBack, editingId }) {
               <div key={prop.id}>
                 <label className="field-label">{prop.name} {prop.is_required && "*"}</label>
                 {isMultiSelectProperty(prop) ? (
-                  <MultiSelect
-                    options={prop.options?.map(o => ({ value: o.value, label: o.label })) || []}
-                    value={val ? val.split(",") : []}
-                    onChange={(next) => handleValueChange(prop.field_key, next.join(","))}
-                    placeholder={`Select ${prop.name}`}
-                  />
+                  (prop.field_key === "company" && !canManage) ? (
+                    <div style={{ padding: "8px 12px", background: "#f8fafc", border: "1px solid #cbd5e1", borderRadius: "6px", fontSize: "13px", color: "#64748b" }}>
+                      {val ? val.split(",").map(id => {
+                        if (id === "unassigned") return "Unassigned Data";
+                        return usersList.find(u => String(u.id) === String(id))?.name;
+                      }).filter(Boolean).join(", ") : "Not Assigned"}
+                    </div>
+                  ) : (
+                    <MultiSelect
+                      options={
+                        prop.field_key === "company"
+                          ? [{ value: "unassigned", label: "Unassigned Data" }, ...usersList.filter(u => u.company_ids && u.company_ids.trim()).map(u => ({ value: String(u.id), label: u.name }))]
+                          : (prop.options?.map(o => ({ value: o.value, label: o.label })) || [])
+                      }
+                      value={val ? val.split(",") : []}
+                      onChange={(next) => {
+                        if (prop.field_key === "company") {
+                          const hasUnassigned = next.includes("unassigned");
+                          const hadUnassigned = (val ? val.split(",") : []).includes("unassigned");
+                          let filtered = next;
+                          if (hasUnassigned && !hadUnassigned) {
+                            filtered = ["unassigned"];
+                          } else if (hasUnassigned && next.length > 1) {
+                            filtered = next.filter(v => v !== "unassigned");
+                          }
+                          handleValueChange(prop.field_key, filtered.join(","));
+                        } else {
+                          handleValueChange(prop.field_key, next.join(","));
+                        }
+                      }}
+                      placeholder={`Select ${prop.name}`}
+                    />
+                  )
                 ) : isMulti ? (
                   <div className="stack" style={{ gap: "8px" }}>
                     {parts.map((p, idx) => (

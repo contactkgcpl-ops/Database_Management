@@ -21,6 +21,7 @@ import { api, assetUrl } from "../api";
 import { useNotify } from "../components/NotificationProvider";
 import { useLoad } from "../hooks/useLoad";
 import { Pagination } from "../components/Pagination";
+import { MultiSelect } from "../components/MultiSelect";
 
 
 const blankForm = {
@@ -43,6 +44,7 @@ const blankForm = {
   is_active: true,
   address: "",
   notes: "",
+  company_ids: "",
 };
 
 const tabs = [
@@ -214,6 +216,7 @@ function userFormData(form, parentId, avatarFile, removeImage) {
   data.append("parent_id", String(parentId || ""));
   data.append("is_active", String(form.is_active));
   data.append("remove_image", String(removeImage));
+  data.append("company_ids", form.company_ids || "");
   if (form.password) data.append("password", form.password);
   if (avatarFile) data.append("profile_image", avatarFile);
   return data;
@@ -239,6 +242,7 @@ export function UsersPage() {
   const notify = useNotify();
   const users = useLoad(() => api.users({ include_inactive: true }));
   const roles = useLoad(() => api.roles());
+  const ourCompanies = useLoad(() => api.ourCompanies(), []);
   const rawUsers = users.data || [];
   const enriched = useMemo(() => {
     const usersById = new Map(rawUsers.map((user) => [user.id, user]));
@@ -302,6 +306,12 @@ export function UsersPage() {
   const blockedParentIds = descendantsOf(rawUsers, editingId);
   if (editingId) blockedParentIds.add(editingId);
   const parentOptions = enriched.filter((user) => !blockedParentIds.has(user.id));
+  const companyOptions = useMemo(() => {
+    return (ourCompanies.data || []).map((c) => ({
+      value: String(c.id),
+      label: c.name
+    }));
+  }, [ourCompanies.data]);
 
   const setField = (key, value) => {
     setDirty(true);
@@ -325,7 +335,7 @@ export function UsersPage() {
 
   const openCreate = () => {
     setEditingId(null);
-    setForm({ ...blankForm, email: "", joining_date: new Date().toISOString().slice(0, 10) });
+    setForm({ ...blankForm, email: "", joining_date: new Date().toISOString().slice(0, 10), company_ids: "" });
     setDirty(false);
     setAvatarPreview("");
     setAvatarFile(null);
@@ -349,6 +359,7 @@ export function UsersPage() {
       profile_image_url: user.profile_image_url || "",
       is_active: user.is_active,
       joining_date: "2026-05-01",
+      company_ids: user.company_ids || "",
     });
     setDirty(false);
     setAvatarPreview(assetUrl(user.profile_image_url) || "");
@@ -431,6 +442,24 @@ export function UsersPage() {
     }
     if (key === "role") return <span className="crm-role-chip">{user.role_name}</span>;
     if (key === "status") return <span className={`crm-status ${user.status.toLowerCase()}`}>{user.status}</span>;
+    if (key === "company_ids") {
+      if (!user.company_ids) return <span className="muted">-</span>;
+      const ids = user.company_ids.split(",");
+      const names = ids.map(id => {
+        const comp = (ourCompanies.data || []).find(c => String(c.id) === String(id));
+        return comp ? comp.name : null;
+      }).filter(Boolean);
+      if (names.length === 0) return <span className="muted">-</span>;
+      return (
+        <div style={{ display: "flex", flexWrap: "wrap", gap: "4px" }}>
+          {names.map((name, i) => (
+            <span key={i} className="crm-role-chip" style={{ background: "#f0fdf4", color: "#166534", border: "1px solid #bbf7d0", fontSize: "11px" }}>
+              {name}
+            </span>
+          ))}
+        </div>
+      );
+    }
     return user[key] || "-";
   };
 
@@ -459,6 +488,15 @@ export function UsersPage() {
               <label>Password *<input type="password" required={!editingId} placeholder={editingId ? "Leave blank to keep password" : "Password"} value={form.password} onChange={(e) => setField("password", e.target.value)} /></label>
               <label>Role<select value={form.role_id} onChange={(e) => setField("role_id", e.target.value)}><option value="">No role</option>{roleOptions.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>
               <label>Senior / Parent User<select value={form.senior_id} onChange={(e) => setField("senior_id", e.target.value)}><option value="">Top Level</option>{parentOptions.map((user) => <option key={user.id} value={user.id}>{user.name} ({user.employee_id})</option>)}</select></label>
+              <div style={{ gridColumn: "span 2" }}>
+                <label style={{ display: "block", marginBottom: "6px" }}>Assigned Companies</label>
+                <MultiSelect
+                  options={companyOptions}
+                  value={form.company_ids ? form.company_ids.split(",") : []}
+                  onChange={(selected) => setField("company_ids", selected.join(","))}
+                  placeholder="Select Companies"
+                />
+              </div>
               <label className="crm-toggle-row"><span>Status *</span><span className="status-control"><input type="checkbox" checked={form.is_active} onChange={(e) => setField("is_active", e.target.checked)} /><b>Active</b></span></label>
             </main>
           </div>
@@ -499,6 +537,7 @@ export function UsersPage() {
                 <th>Role</th>
                 <th>Senior / Parent User</th>
                 <th>Team Members Under Them</th>
+                <th>Assigned Companies</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -517,6 +556,7 @@ export function UsersPage() {
                   <td>{renderCell(user, "role")}</td>
                   <td><div className="user-parent-cell"><strong>{user.senior_name}</strong><small>{user.senior_id_text || "Top Level"}</small></div></td>
                   <td>{renderCell(user, "team")}</td>
+                  <td>{renderCell(user, "company_ids")}</td>
                   <td>{renderCell(user, "status")}</td>
                   <td>
                     <div className="user-grid-actions">
@@ -560,7 +600,25 @@ export function UsersPage() {
               {tabs.map(([key, label, Icon]) => <button key={key} className={detailTab === key ? "active" : ""} onClick={() => setDetailTab(key)}><Icon size={15} />{label}</button>)}
             </div>
             <div className="crm-tab-panel">
-              {detailTab === "basic" && <div className="crm-detail-grid"><span>Email<strong>{detailUser.email}</strong></span><span>Mobile<strong>{detailUser.mobile}</strong></span><span>Manager<strong>{detailUser.senior_name}</strong></span><span>Last Login<strong>{detailUser.last_login}</strong></span></div>}
+              {detailTab === "basic" && (
+                <div className="crm-detail-grid">
+                  <span>Email<strong>{detailUser.email}</strong></span>
+                  <span>Mobile<strong>{detailUser.mobile}</strong></span>
+                  <span>Manager<strong>{detailUser.senior_name}</strong></span>
+                  <span>Last Login<strong>{detailUser.last_login}</strong></span>
+                  <span style={{ gridColumn: "span 2" }}>
+                    Assigned Companies
+                    <strong style={{ display: "block", marginTop: "4px" }}>
+                      {detailUser.company_ids ? (
+                        detailUser.company_ids.split(",").map(id => {
+                          const comp = (ourCompanies.data || []).find(c => String(c.id) === String(id));
+                          return comp ? comp.name : null;
+                        }).filter(Boolean).join(", ") || "-"
+                      ) : "-"}
+                    </strong>
+                  </span>
+                </div>
+              )}
               {detailTab === "permissions" && <p><ShieldCheck size={16} /> Role: <strong>{detailUser.role_name}</strong>. Clone permissions and role matrix available in Role Management.</p>}
               {detailTab === "teams" && <p><Users size={16} /> Assigned to {detailUser.department}. {detailUser.team_count} team members under this user.</p>}
               {detailTab === "login" && <ul><li>Today 09:34 AM - Web login</li><li>Yesterday 06:12 PM - Password verified</li></ul>}

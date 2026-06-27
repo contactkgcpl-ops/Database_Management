@@ -24,17 +24,17 @@ import { HourlyReportsPage } from "../pages/HourlyReportsPage";
 import { TeamReportsPage } from "../pages/TeamReportsPage";
 import { NotificationBell } from "../components/NotificationBell";
 import { GlobalChat } from "../components/GlobalChat";
-import { TasksPage } from "../pages/TasksPage";
-import { StaffReportPage } from "../pages/StaffReportPage";
 import { ApplyLeavePage } from "../pages/ApplyLeavePage";
 import { MyLeavesPage } from "../pages/MyLeavesPage";
 import { LeaveApprovalsPage } from "../pages/LeaveApprovalsPage";
 import { LeaveCalendarPage } from "../pages/LeaveCalendarPage";
 import { EmployeeAttendancePage } from "../pages/EmployeeAttendancePage";
 import { ConnectionTrackingPage } from "../pages/ConnectionTrackingPage";
+import { ReportsPage } from "../pages/ReportsPage";
 
 const pageMap = {
   "connection-tracking": ConnectionTrackingPage,
+  "activity-reports": ReportsPage,
   dashboard: DashboardPage,
   users: UsersPage,
   roles: RolesPage,
@@ -49,13 +49,11 @@ const pageMap = {
   "my-leads": MyLeadsPage,
   "today-followup": FollowUpsPage,
   inquiries: InquiriesPage,
-  tasks: TasksPage,
   requirements: RequirementsPage,
   "my-time": (props) => <TimeTrackingPage {...props} mode="my" />,
   "user-time": (props) => <TimeTrackingPage {...props} mode="users" />,
   "hourly-reports": HourlyReportsPage,
   "team-reports": TeamReportsPage,
-  "staff-report": StaffReportPage,
   "leave-apply": ApplyLeavePage,
   "leave-my": MyLeavesPage,
   "leave-approvals": LeaveApprovalsPage,
@@ -107,10 +105,10 @@ export function AppLayout({ page, setPage }) {
   const CurrentPage = pageMap[page] || DashboardPage;
   const pageLabel = page === "add-company" ? "Add Company" :
     page === "our-companies" ? "Our Companies" :
-    page === "import-companies" ? "Import Companies" :
-      page === "bulk-edit-companies" ? "Bulk Edit Companies" :
-        page === "vendors" ? "Vendors" :
-          (flatNavigation.find((item) => item.page === page)?.label || "Dashboard");
+      page === "import-companies" ? "Import Companies" :
+        page === "bulk-edit-companies" ? "Bulk Edit Companies" :
+          page === "vendors" ? "Vendors" :
+            (flatNavigation.find((item) => item.page === page)?.label || "Dashboard");
   useEffect(() => {
     const activeGroup = allowed.find((item) => item.children?.some((child) => child.page === page));
     if (activeGroup) {

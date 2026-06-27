@@ -341,6 +341,8 @@ def migrate_user_hierarchy_profile_fields(db: Session) -> None:
         db.execute(text("ALTER TABLE users ADD COLUMN parent_id INTEGER"))
     if "profile_image_url" not in columns:
         db.execute(text("ALTER TABLE users ADD COLUMN profile_image_url TEXT"))
+    if "company_ids" not in columns:
+        db.execute(text("ALTER TABLE users ADD COLUMN company_ids TEXT"))
     db.commit()
 
 

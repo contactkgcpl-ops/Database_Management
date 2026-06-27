@@ -438,8 +438,24 @@ def assign_company(db: Session, company: Company, user_id: int | None, assigned_
     
     if assignment.assigned_to_id != user_id:
         assignment.assigned_to_id = user_id
+        # Sync assigned_to_ids — keep any existing extra IDs, ensure new primary is first
+        existing_ids = []
+        if assignment.assigned_to_ids:
+            for part in str(assignment.assigned_to_ids).split(","):
+                part = part.strip()
+                if part:
+                    try:
+                        existing_ids.append(int(part))
+                    except ValueError:
+                        pass
+        if user_id is not None and user_id not in existing_ids:
+            existing_ids = [user_id] + existing_ids
+        elif user_id is None:
+            existing_ids = []
+        assignment.assigned_to_ids = ",".join(str(i) for i in existing_ids) if existing_ids else None
         if assigned_by_id:
             assignment.assigned_by_id = assigned_by_id
+
         
         # Add history for assignment change
         old_user_name = ""
@@ -606,6 +622,7 @@ def to_company_out(db: Session, company: Company, for_user_id: int | None = None
         update={
             "created_by_name": company.creator.name if company.creator else None,
             "assigned_to": assigned_to,
+            "assigned_to_ids": assignment.assigned_to_ids if assignment else None,
             "assigned_user_name": assigned_user_name,
             "assigned_by": assigned_by,
             "assigned_by_name": assigned_by_name,

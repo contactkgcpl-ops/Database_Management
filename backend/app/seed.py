@@ -31,10 +31,7 @@ DEFAULT_PERMISSIONS = [
     ("time.view", "View My Time", "time", "Time Tracking", 90),
     ("time.break", "Break Controls", "time", "Time Tracking", 91),
     ("time.manage", "Manage User Time", "time", "Time Tracking", 92),
-    ("tasks.view", "View Tasks", "staff-management", "Staff Management", 100),
-    ("tasks.create", "Create Tasks", "staff-management", "Staff Management", 101),
-    ("tasks.manage", "Manage Tasks", "staff-management", "Staff Management", 102),
-    ("tasks.report", "View Staff Report", "staff-management", "Staff Management", 103),
+
     ("vendors.view", "View Vendors", "purchase", "Purchase", 110),
     ("vendors.manage", "Manage Vendors", "purchase", "Purchase", 111),
     ("leave.view", "View Leave Dashboard", "leave-management", "Leave Management", 120),
@@ -45,6 +42,8 @@ DEFAULT_PERMISSIONS = [
     ("our_companies.view", "View Our Companies", "our-companies", "Our Companies", 130),
     ("our_companies.manage", "Manage Our Companies", "our-companies", "Our Companies", 131),
     ("tracking.view", "View Tracking Dashboard", "tracking", "Tracking", 140),
+    ("reports.view", "View Activity Reports", "tracking", "Tracking & Reporting", 145),
+    ("reports.config", "Manage Email Report Settings", "tracking", "Tracking & Reporting", 146),
 ]
 
 DEFAULT_PROPERTIES = [
@@ -59,6 +58,7 @@ DEFAULT_PROPERTIES = [
     ("Website", "website", "text", "custom", "Website", False, False, False, "company", "text", True, 50, 0),
     ("Description", "description", "textarea", "custom", "", False, False, False, "company", "text", True, 60, 0),
     ("Verification Status", "verification_status", "dropdown", "custom", "Company verification status", False, False, False, "company", "dropdown", True, 15, 0),
+    ("Assign Data", "company", "multiselect", "custom", "Our Company", False, False, False, "company", "multiselect", True, 25, 0),
     ("Cold Leads Status", "status", "dropdown", "custom", "", False, False, False, "lead", "dropdown", True, 2, 0),
     ("Connected Source", "connected_source", "multiselect", "custom", "Lead connected source", False, False, False, "lead", "multiselect", True, 3, 0),
     ("Inquiry No", "inquiry_no", "text", "custom", "Inquiry Number", False, False, False, "lead", "text", True, 10, 0),

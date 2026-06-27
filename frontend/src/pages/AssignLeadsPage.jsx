@@ -24,7 +24,16 @@ function splitMultiValue(value) {
     .filter(Boolean);
 }
 
+let usersGlobal = [];
+
 function propertyOptions(property) {
+  if (property?.field_key === "company") {
+    const filteredUsers = usersGlobal.filter(u => u.company_ids && u.company_ids.trim());
+    return [
+      { value: "unassigned", label: "Unassigned Data" },
+      ...filteredUsers.map((u) => ({ label: u.name, value: String(u.id) }))
+    ];
+  }
   return (property?.options || [])
     .filter((option) => option.is_active !== false)
     .map((option) => ({ label: option.label, value: option.value }));
@@ -47,6 +56,28 @@ const getVerificationStatusStyle = (value) => {
   if (value === "unverified") return { backgroundColor: "#fee2e2", color: "#991b1b", fontWeight: "700", border: "1px solid #fecaca" };
   return {};
 };
+
+function getSubordinates(currentUser, allUsers) {
+  if (!currentUser || !allUsers?.length) return [];
+  const subordinates = [];
+  const queue = [currentUser.id];
+  const visited = new Set();
+
+  while (queue.length > 0) {
+    const currentId = queue.shift();
+    if (visited.has(currentId)) continue;
+    visited.add(currentId);
+
+    const children = allUsers.filter(u => u.parent_id === currentId || u.parent_id === String(currentId) || Number(u.parent_id) === Number(currentId));
+    children.forEach(child => {
+      subordinates.push(child);
+      queue.push(child.id);
+    });
+  }
+
+  const selfUser = allUsers.find(u => Number(u.id) === Number(currentUser.id));
+  return selfUser ? [selfUser, ...subordinates] : subordinates;
+}
 
 export function AssignLeadsPage({ setPage, setEditingId }) {
   const { user } = useAuth();
@@ -74,20 +105,40 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
   const [columnFilters, setColumnFilters] = useState({});
   const [sort, setSort] = useState({ key: "id", direction: "desc" });
 
-  const serializedFilters = JSON.stringify(columnFilters);
+  const users = useLoad(() => api.users(), []);
+
+  const isAdmin = user?.role_name === "Admin" || user?.role?.name === "Admin";
+
+  const mySubordinateNames = useMemo(() => {
+    if (!user || !users.data || isAdmin) return null;
+    const subs = getSubordinates(user, users.data);
+    return subs.map(u => u.name);
+  }, [user, users.data, isAdmin]);
+
+  const serializedFilters = useMemo(() => {
+    const activeFilters = { ...columnFilters };
+    if (!isAdmin && mySubordinateNames) {
+      if (activeFilters.assigned_to) {
+        activeFilters.assigned_to = activeFilters.assigned_to.filter(name => mySubordinateNames.includes(name));
+      }
+    }
+    return JSON.stringify(activeFilters);
+  }, [columnFilters, isAdmin, mySubordinateNames]);
+
   const companies = useLoad(() => api.companies({
     page: currentPage,
     page_size: pageSize,
     q,
     sort_key: sort.key,
     sort_dir: sort.direction,
-    filters: serializedFilters
+    filters: serializedFilters,
+    for_assign_leads: true
   }), [currentPage, pageSize, q, sort.key, sort.direction, serializedFilters]);
 
-  const users = useLoad(() => api.users(), []);
   const properties = useLoad(() => api.properties(), []);
   const propertyGrids = useLoad(() => api.propertyGrids(), []);
-  
+  usersGlobal = users.data || [];
+
   const companiesList = useMemo(
     () => Array.isArray(companies.data) ? companies.data : (companies.data?.companies || []),
     [companies.data]
@@ -166,9 +217,19 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
       return;
     }
     try {
-      await api.updateCompanyInline(companyId, { property_id: prop.id, value });
+      const updated = await api.updateCompanyInline(companyId, { property_id: prop.id, value });
       notify("Status updated", "success");
-      companies.reload();
+      companies.setData((prev) => {
+        if (Array.isArray(prev)) {
+          return prev.map((c) => (c.id === companyId ? updated : c));
+        } else if (prev && typeof prev === "object") {
+          return {
+            ...prev,
+            companies: (prev.companies || []).map((c) => (c.id === companyId ? updated : c)),
+          };
+        }
+        return prev;
+      });
     } catch (err) { }
   };
 
@@ -176,7 +237,7 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
     e.preventDefault();
     if (!statusModal) return;
     try {
-      await api.updateCompanyInline(statusModal.companyId, {
+      const updated = await api.updateCompanyInline(statusModal.companyId, {
         property_id: statusModal.property.id,
         value: statusForm.status,
         remark: statusForm.remark,
@@ -184,7 +245,17 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
       });
       notify("Status updated", "success");
       setStatusModal(null);
-      companies.reload();
+      companies.setData((prev) => {
+        if (Array.isArray(prev)) {
+          return prev.map((c) => (c.id === statusModal.companyId ? updated : c));
+        } else if (prev && typeof prev === "object") {
+          return {
+            ...prev,
+            companies: (prev.companies || []).map((c) => (c.id === statusModal.companyId ? updated : c)),
+          };
+        }
+        return prev;
+      });
     } catch (err) { }
   };
 
@@ -247,11 +318,28 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
     }
   };
 
-  const handleAssign = async (companyId, userId) => {
+  const handleAssign = async (companyId, userIds) => {
+    // userIds is an array of user id strings from multi-select
+    const ids = Array.isArray(userIds) ? userIds : [userIds].filter(Boolean);
+    const primaryId = ids.length > 0 ? ids[0] : null;
+    const assignedToIds = ids.join(",") || null;
     try {
-      await api.assignCompany(companyId, userId || null);
+      const params = new URLSearchParams();
+      if (primaryId) params.append("user_id", primaryId);
+      if (assignedToIds) params.append("assigned_to_ids", assignedToIds);
+      const updated = await api.assignCompany(companyId, primaryId || null, assignedToIds);
       notify("Lead assigned successfully", "success");
-      companies.reload();
+      companies.setData((prev) => {
+        if (Array.isArray(prev)) {
+          return prev.map((c) => (c.id === companyId ? updated : c));
+        } else if (prev && typeof prev === "object") {
+          return {
+            ...prev,
+            companies: (prev.companies || []).map((c) => (c.id === companyId ? updated : c)),
+          };
+        }
+        return prev;
+      });
     } catch (err) {
       notify("Failed to assign lead", "error");
     }
@@ -269,11 +357,23 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
 
     const userId = bulkAction.slice("assign:".length);
     try {
-      await Promise.all(selectedLeadIds.map((companyId) => api.assignCompany(companyId, userId || null)));
+      const results = await Promise.all(selectedLeadIds.map((companyId) => api.assignCompany(companyId, userId || null)));
       notify("Bulk assignment updated", "success");
       setSelectedLeadIds([]);
       setBulkAction("");
-      companies.reload();
+
+      companies.setData((prev) => {
+        const updateMap = new Map(results.map(r => [r.id, r]));
+        if (Array.isArray(prev)) {
+          return prev.map((c) => (updateMap.has(c.id) ? updateMap.get(c.id) : c));
+        } else if (prev && typeof prev === "object") {
+          return {
+            ...prev,
+            companies: (prev.companies || []).map((c) => (updateMap.has(c.id) ? updateMap.get(c.id) : c)),
+          };
+        }
+        return prev;
+      });
     } catch (err) {
       notify("Failed to update selected leads", "error");
     }
@@ -293,10 +393,54 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
     return company.assigned_user_name || user?.name || String(company.assigned_to);
   };
 
+  const allowedAssignees = useMemo(() => {
+    if (!users.data || !user) return [];
+    const allAllowed = getSubordinates(user, users.data);
+    return allAllowed.filter(u => u.company_ids);
+  }, [users.data, user]);
+
+  const getAllowedAssigneesForCompany = (company) => {
+    if (!users.data || !user) return [];
+
+    // Get subordinates of the currently logged-in user
+    const loginUserSubordinates = getSubordinates(user, users.data);
+    const loginUserSubordinateIds = new Set(loginUserSubordinates.map(u => Number(u.id)));
+
+    // Get the user IDs from the dynamic "company" (Assign Data) column of this company
+    const assignDataVal = getVal(company, { field_key: "company" }) || "";
+    const assignedUserIds = assignDataVal.split(",").map(s => Number(s.trim())).filter(Boolean);
+
+
+    if (assignedUserIds.length === 0) {
+      return loginUserSubordinates;
+    }
+
+    // Get the assigned user objects
+    const assignedUsers = users.data.filter(u => assignedUserIds.includes(Number(u.id)));
+
+    // Collect all child users (subordinates) of these assigned users
+    const allAllowed = [];
+    const visited = new Set();
+
+    assignedUsers.forEach(au => {
+      // Get subordinates of this assigned user
+      const subs = getSubordinates(au, users.data); // Note: getSubordinates(au) already includes au itself
+      subs.forEach(s => {
+        if (!visited.has(s.id)) {
+          visited.add(s.id);
+          allAllowed.push(s);
+        }
+      });
+    });
+
+    const filtered = allAllowed.filter(u => loginUserSubordinateIds.has(Number(u.id)));
+    return filtered;
+  };
+
   const assignedToOptions = useMemo(() => {
-    const list = (users.data || []).map((u) => u.name);
+    const list = allowedAssignees.map((u) => u.name);
     return ["Not Assigned", ...uniqueSorted(list)];
-  }, [users.data]);
+  }, [allowedAssignees]);
 
   const assignedByOptions = useMemo(() => {
     const list = (users.data || []).map((u) => u.name);
@@ -400,7 +544,7 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
           <div className="muted">No leads found</div>
         ) : (
           <>
-             {bulkMode && (
+            {bulkMode && (
               <div className="bulk-action-bar">
                 <button type="button" className="bulk-link" onClick={() => setSelectedLeadIds(companiesList.map((company) => Number(company.id)))}>Select all</button>
                 <button type="button" className="bulk-link" onClick={() => setSelectedLeadIds([])}>Unselect all</button>
@@ -409,7 +553,7 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
                 <select value={bulkAction} onChange={(event) => setBulkAction(event.target.value)} aria-label="Bulk action">
                   <option value="">Actions</option>
                   <option value="assign:">Unassign leads</option>
-                  {users.data?.map((user) => (
+                  {allowedAssignees.map((user) => (
                     <option key={user.id} value={`assign:${user.id}`}>{user.name}</option>
                   ))}
                 </select>
@@ -514,27 +658,177 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
                     }
                     return (
                       <tr key={c.id} className={rowClassName}>
-                      {bulkMode && (
-                        <td className="bulk-select-col">
-                          <input
-                            type="checkbox"
-                            checked={selectedLeadIdSet.has(Number(c.id))}
-                            onChange={() => toggleLeadSelection(c.id)}
-                            aria-label={`Select ${c.company_name}`}
-                          />
-                        </td>
-                      )}
-                      {gridProperties.map((p) => (
-                        <td key={p.field_key} style={{ width: `${getColumnWidth(p)}px`, minWidth: `${getColumnWidth(p)}px`, maxWidth: `${getColumnWidth(p)}px` }}>
-                          {p.field_key === "assigned_to" ? (
-                            <div className="assign-cell">
+                        {bulkMode && (
+                          <td className="bulk-select-col">
+                            <input
+                              type="checkbox"
+                              checked={selectedLeadIdSet.has(Number(c.id))}
+                              onChange={() => toggleLeadSelection(c.id)}
+                              aria-label={`Select ${c.company_name}`}
+                            />
+                          </td>
+                        )}
+                        {gridProperties.map((p) => (
+                          <td key={p.field_key} style={{ width: `${getColumnWidth(p)}px`, minWidth: `${getColumnWidth(p)}px`, maxWidth: `${getColumnWidth(p)}px` }}>
+                            {p.field_key === "assigned_to" ? (
+                              <div className="assign-cell">
+                                <GridFilterDropdown
+                                  label={
+                                    (() => {
+                                      const rawIds = c.assigned_to_ids
+                                        ? String(c.assigned_to_ids).split(",").map(s => s.trim()).filter(Boolean)
+                                        : c.assigned_to ? [String(c.assigned_to)] : [];
+                                      if (!rawIds.length) return "Not Assigned";
+                                      return rawIds.map(id => {
+                                        const u = users.data?.find(u => String(u.id) === String(id));
+                                        return u ? u.name : id;
+                                      }).join(", ");
+                                    })()
+                                  }
+                                  options={(() => {
+                                    const companyAllowed = getAllowedAssigneesForCompany(c);
+                                    const opts = [...companyAllowed];
+                                    // Include any currently assigned users not in opts
+                                    const rawIds = c.assigned_to_ids
+                                      ? String(c.assigned_to_ids).split(",").map(s => s.trim()).filter(Boolean)
+                                      : c.assigned_to ? [String(c.assigned_to)] : [];
+                                    rawIds.forEach(id => {
+                                      const found = users.data?.find(u => String(u.id) === String(id));
+                                      if (found && !opts.some(o => String(o.id) === String(id))) opts.push(found);
+                                    });
+                                    return opts.map(u => ({ label: u.name, value: String(u.id) }));
+                                  })()}
+                                  value={(() => {
+                                    const rawIds = c.assigned_to_ids
+                                      ? String(c.assigned_to_ids).split(",").map(s => s.trim()).filter(Boolean)
+                                      : c.assigned_to ? [String(c.assigned_to)] : [];
+                                    return rawIds;
+                                  })()}
+                                  onChange={(selectedIds) => handleAssign(c.id, selectedIds)}
+                                  isMulti={true}
+                                  style={{ flex: 1, minWidth: 0 }}
+                                />
+                                {c.history_keys?.includes("assigned_to") && (
+                                  <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, "assigned_to")} title="View Assignment History">
+                                    <History size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            ) : p.field_key === "assigned_by_name" ? (
+                              <span className="cell-text" style={{ fontSize: "11px", color: "#64748b", fontWeight: "600" }}>
+                                {c.assigned_by_name || "-"}
+                              </span>
+                            ) : p.field_key === "connected_source" ? (
+                              <div className="assign-cell">
+                                <span className="cell-text" title={getVal(c, p)} style={{ flex: 1, fontWeight: "600", fontSize: "12px" }}>
+                                  {getVal(c, p) || "-"}
+                                </span>
+                                <ConnectedSourceActions
+                                  companyId={c.id}
+                                  connectedSourceProperty={p}
+                                  connectedSourceValue={getVal(c, p)}
+                                  contactNumber={getVal(c, { field_key: "contact_number" })}
+                                  emailId={getVal(c, { field_key: "email_id" })}
+                                  onUpdated={companies.reload}
+                                />
+                                {c.history_keys?.includes(p.field_key) && (
+                                  <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, p.field_key)} title={`View ${p.name} History`}>
+                                    <History size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            ) : READ_ONLY_HISTORY_FIELDS.has(p.field_key) ? (
+                              <div className="assign-cell">
+                                <span className="cell-text" title={p.field_key === "connected_source" ? getVal(c, p) : formatPropertyValue(p, getVal(c, p))} style={{ flex: 1, fontWeight: "600", fontSize: "12px" }}>
+                                  {p.field_key === "connected_source" ? (getVal(c, p) || "-") : (formatPropertyValue(p, getVal(c, p)) || "-")}
+                                </span>
+                                {c.history_keys?.includes(p.field_key) && (
+                                  <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, p.field_key)} title={`View ${p.name} History`}>
+                                    <History size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            ) : (p.object_type === "multiselect" && p.field_key !== "type" && p.field_key !== "company") ? (
+                              <div className="inline-multi-select" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+                                <GridFilterDropdown
+                                  label={formatPropertyValue(p, getVal(c, p)) || "-"}
+                                  options={propertyOptions(p)}
+                                  value={splitMultiValue(getVal(c, p))}
+                                  onChange={(next) => {
+                                    let filtered = next;
+                                    if (p.field_key === "company") {
+                                      const hasUnassigned = next.includes("unassigned");
+                                      const hadUnassigned = splitMultiValue(getVal(c, p)).includes("unassigned");
+                                      if (hasUnassigned && !hadUnassigned) {
+                                        filtered = ["unassigned"];
+                                      } else if (hasUnassigned && next.length > 1) {
+                                        filtered = next.filter(v => v !== "unassigned");
+                                      }
+                                    }
+                                    handleInlineEdit(c.id, p, filtered.join(","));
+                                  }}
+                                  isMulti={true}
+                                  showSaveButton={true}
+                                />
+                                {c.history_keys?.includes(p.field_key) && (
+                                  <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, p.field_key)} title={`View ${p.name} History`} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
+                                    <History size={14} style={{ color: "#64748b" }} />
+                                  </button>
+                                )}
+                              </div>
+                            ) : p.object_type === "multiselect" ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <span className="cell-text" title={getVal(c, p)}>
+                                  {formatPropertyValue(p, getVal(c, p)) || "-"}
+                                </span>
+                                {p.field_key === "company" && c.history_keys?.includes(p.field_key) && (
+                                  <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, p.field_key)} title={`View ${p.name} History`} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
+                                    <History size={14} style={{ color: "#64748b" }} />
+                                  </button>
+                                )}
+                              </div>
+                            ) : p.object_type === "dropdown" ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                <select
+                                  className="inline-select"
+                                  style={{
+                                    flex: 1,
+                                    padding: "4px",
+                                    border: "1px solid #e2e8f0",
+                                    borderRadius: "4px",
+                                    fontSize: "12px",
+                                    ...getVerificationStatusStyle(getVal(c, p))
+                                  }}
+                                  value={getVal(c, p) || ""}
+                                  onChange={(e) => handleInlineEdit(c.id, p, e.target.value)}
+                                >
+                                  <option value="">-</option>
+                                  {p.options?.map(o => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                  ))}
+                                </select>
+                                {c.history_keys?.includes(p.field_key) && (
+                                  <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, p.field_key)} title={`View ${p.name} History`} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
+                                    <History size={14} style={{ color: "#64748b" }} />
+                                  </button>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="cell-text" title={getVal(c, p)}>
+                                {p.field_key === "company_name" ? <strong>{getVal(c, p)}</strong> : getVal(c, p)}
+                              </span>
+                            )}
+                          </td>
+                        ))}
+                        {false && (<>
+                          <td>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <select
                                 className="compact-select"
                                 value={c.assigned_to || ""}
                                 onChange={(e) => handleAssign(c.id, e.target.value)}
                                 style={{
                                   flex: 1,
-                                  minWidth: 0,
                                   height: "28px",
                                   fontSize: "12px",
                                   padding: "0 8px",
@@ -551,134 +845,26 @@ export function AssignLeadsPage({ setPage, setEditingId }) {
                                   <option key={u.id} value={u.id}>{u.name}</option>
                                 ))}
                               </select>
-                              {c.history_keys?.includes("assigned_to") && (
-                                <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, "assigned_to")} title="View Assignment History">
-                                  <History size={14} />
-                                </button>
-                              )}
+                              <button className="icon-button small" onClick={() => openHistory(c.id, "assigned_to")} title="View Assignment History" style={{ padding: "4px" }}>
+                                <span style={{ fontSize: "14px" }}>🕒</span>
+                              </button>
                             </div>
-                          ) : p.field_key === "assigned_by_name" ? (
+                          </td>
+                          <td>
                             <span className="cell-text" style={{ fontSize: "11px", color: "#64748b", fontWeight: "600" }}>
                               {c.assigned_by_name || "-"}
                             </span>
-                          ) : p.field_key === "connected_source" ? (
-                            <div className="assign-cell">
-                              <span className="cell-text" title={getVal(c, p)} style={{ flex: 1, fontWeight: "600", fontSize: "12px" }}>
-                                {getVal(c, p) || "-"}
-                              </span>
-                              <ConnectedSourceActions
-                                companyId={c.id}
-                                connectedSourceProperty={p}
-                                connectedSourceValue={getVal(c, p)}
-                                contactNumber={getVal(c, { field_key: "contact_number" })}
-                                emailId={getVal(c, { field_key: "email_id" })}
-                                onUpdated={companies.reload}
-                              />
-                              {c.history_keys?.includes(p.field_key) && (
-                                <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, p.field_key)} title={`View ${p.name} History`}>
-                                  <History size={14} />
-                                </button>
-                              )}
-                            </div>
-                          ) : READ_ONLY_HISTORY_FIELDS.has(p.field_key) ? (
-                            <div className="assign-cell">
-                              <span className="cell-text" title={p.field_key === "connected_source" ? getVal(c, p) : formatPropertyValue(p, getVal(c, p))} style={{ flex: 1, fontWeight: "600", fontSize: "12px" }}>
-                                {p.field_key === "connected_source" ? (getVal(c, p) || "-") : (formatPropertyValue(p, getVal(c, p)) || "-")}
-                              </span>
-                              {c.history_keys?.includes(p.field_key) && (
-                                <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, p.field_key)} title={`View ${p.name} History`}>
-                                  <History size={14} />
-                                </button>
-                              )}
-                            </div>
-                          ) : p.object_type === "multiselect" ? (
-                            <div className="inline-multi-select">
-                              <GridFilterDropdown
-                                label={formatPropertyValue(p, getVal(c, p)) || "-"}
-                                options={propertyOptions(p)}
-                                value={splitMultiValue(getVal(c, p))}
-                                onChange={(val) => handleInlineEdit(c.id, p, val.join(","))}
-                                isMulti={true}
-                              />
-                            </div>
-                          ) : p.object_type === "dropdown" ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <select
-                                className="inline-select"
-                                style={{
-                                  flex: 1,
-                                  padding: "4px",
-                                  border: "1px solid #e2e8f0",
-                                  borderRadius: "4px",
-                                  fontSize: "12px",
-                                  ...getVerificationStatusStyle(getVal(c, p))
-                                }}
-                                value={getVal(c, p) || ""}
-                                onChange={(e) => handleInlineEdit(c.id, p, e.target.value)}
-                              >
-                                <option value="">-</option>
-                                {p.options?.map(o => (
-                                  <option key={o.value} value={o.value}>{o.label}</option>
-                                ))}
-                              </select>
-                              {c.history_keys?.includes(p.field_key) && (
-                                <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, p.field_key)} title={`View ${p.name} History`} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
-                                  <History size={14} style={{ color: "#64748b" }} />
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="cell-text" title={getVal(c, p)}>
-                              {p.field_key === "company_name" ? <strong>{getVal(c, p)}</strong> : getVal(c, p)}
-                            </span>
-                          )}
-                        </td>
-                      ))}
-                      {false && (<>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                            <select
-                              className="compact-select"
-                              value={c.assigned_to || ""}
-                              onChange={(e) => handleAssign(c.id, e.target.value)}
-                              style={{
-                                flex: 1,
-                                height: "28px",
-                                fontSize: "12px",
-                                padding: "0 8px",
-                                borderRadius: "6px",
-                                border: "1px solid #d9e2ee",
-                                background: c.assigned_to ? "#f0fdf4" : "#fff",
-                                color: c.assigned_to ? "#176b5b" : "#475569",
-                                fontWeight: c.assigned_to ? "600" : "400",
-                                boxSizing: "border-box"
-                              }}
-                            >
-                              <option value="">Not Assigned</option>
-                              {users.data?.map(u => (
-                                <option key={u.id} value={u.id}>{u.name}</option>
-                              ))}
-                            </select>
-                            <button className="icon-button small" onClick={() => openHistory(c.id, "assigned_to")} title="View Assignment History" style={{ padding: "4px" }}>
-                              <span style={{ fontSize: "14px" }}>🕒</span>
-                            </button>
-                          </div>
-                        </td>
-                        <td>
-                          <span className="cell-text" style={{ fontSize: "11px", color: "#64748b", fontWeight: "600" }}>
-                            {c.assigned_by_name || "-"}
-                          </span>
-                        </td>
+                          </td>
                         </>)}
-                      {canManage && (
-                        <td>
-                          <div className="row-actions">
-                            <button type="button" className="secondary icon-only" onClick={() => edit(c)} title="Edit Company"><Pencil size={16} /></button>
-                            <button type="button" className="danger icon-only" onClick={() => remove(c)} title="Delete Company"><Trash2 size={16} /></button>
-                          </div>
-                        </td>
-                      )}
-                    </tr>
+                        {canManage && (
+                          <td>
+                            <div className="row-actions">
+                              <button type="button" className="secondary icon-only" onClick={() => edit(c)} title="Edit Company"><Pencil size={16} /></button>
+                              <button type="button" className="danger icon-only" onClick={() => remove(c)} title="Delete Company"><Trash2 size={16} /></button>
+                            </div>
+                          </td>
+                        )}
+                      </tr>
                     );
                   })}
                 </tbody>

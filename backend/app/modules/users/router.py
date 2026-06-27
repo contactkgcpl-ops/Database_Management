@@ -101,6 +101,7 @@ async def parse_user_payload(request: Request, require_password: bool) -> tuple[
         "parent_id": optional_int(str(data.get("parent_id")) if data.get("parent_id") is not None else None, "parent_id"),
         "is_active": optional_bool(data.get("is_active"), True),
         "remove_image": optional_bool(data.get("remove_image"), False),
+        "company_ids": str(data.get("company_ids") or "").strip() or None,
     }
     password = str(data.get("password") or "")
     if require_password and len(password) < 6:
@@ -173,6 +174,7 @@ async def create_user(
         parent_id=payload["parent_id"],
         profile_image_url=image_url,
         is_active=payload["is_active"],
+        company_ids=payload["company_ids"],
     )
     db.add(user)
     db.commit()
@@ -202,6 +204,7 @@ async def update_user(
     user.role_id = payload["role_id"]
     user.parent_id = payload["parent_id"]
     user.is_active = payload["is_active"]
+    user.company_ids = payload["company_ids"]
     if payload.get("password"):
         user.hashed_password = hash_password(payload["password"])
     db.commit()

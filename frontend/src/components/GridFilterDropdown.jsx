@@ -22,12 +22,27 @@ function getAvatarColor(label = "") {
   return colors[index];
 }
 
-export function GridFilterDropdown({ label, options, value, onChange, isMulti }) {
+function parseValueArray(val) {
+  if (Array.isArray(val)) return val;
+  if (typeof val === "string") {
+    return val.split(",").map((v) => v.trim()).filter(Boolean);
+  }
+  return val ? [val] : [];
+}
+
+export function GridFilterDropdown({ label, options, value, onChange, isMulti, showSaveButton }) {
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const containerRef = useRef(null);
 
   const [dropdownStyle, setDropdownStyle] = useState({});
+  const [localValue, setLocalValue] = useState(value);
+
+  useEffect(() => {
+    if (isOpen) {
+      setLocalValue(value);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     const handleClickOutside = (event) => {
@@ -63,7 +78,10 @@ export function GridFilterDropdown({ label, options, value, onChange, isMulti })
     }
     return { value: String(option), label: String(option) };
   });
-  const selectedArray = (Array.isArray(value) ? value : value ? [value] : []).map(String);
+  const selectedArray = (showSaveButton
+    ? parseValueArray(localValue)
+    : parseValueArray(value)
+  ).map(String);
   const filteredOptions = normalizedOptions.filter(opt =>
     opt.label.toLowerCase().includes(search.toLowerCase())
   );
@@ -73,16 +91,28 @@ export function GridFilterDropdown({ label, options, value, onChange, isMulti })
       const next = selectedArray.includes(opt.value)
         ? selectedArray.filter(v => v !== opt.value)
         : [...selectedArray, opt.value];
-      onChange(next);
+      if (showSaveButton) {
+        setLocalValue(next);
+      } else {
+        onChange(next);
+      }
     } else {
-      onChange(opt.value === String(value) ? "" : opt.value);
-      setIsOpen(false);
+      if (showSaveButton) {
+        setLocalValue(opt.value === String(localValue) ? "" : opt.value);
+      } else {
+        onChange(opt.value === String(value) ? "" : opt.value);
+        setIsOpen(false);
+      }
     }
   };
 
   const clearAll = (e) => {
     e.stopPropagation();
-    onChange(isMulti ? [] : "");
+    if (showSaveButton) {
+      setLocalValue(isMulti ? [] : "");
+    } else {
+      onChange(isMulti ? [] : "");
+    }
   };
 
   const isSelected = (opt) => selectedArray.includes(opt.value);
@@ -137,8 +167,12 @@ export function GridFilterDropdown({ label, options, value, onChange, isMulti })
           <div className="premium-list">
             {isMulti && (
                <div className="premium-item select-all" onClick={() => {
-                  if (selectedArray.length === normalizedOptions.length) onChange([]);
-                  else onChange(normalizedOptions.map((option) => option.value));
+                  if (selectedArray.length === normalizedOptions.length) {
+                    if (showSaveButton) setLocalValue([]); else onChange([]);
+                  } else {
+                    const allVals = normalizedOptions.map((option) => option.value);
+                    if (showSaveButton) setLocalValue(allVals); else onChange(allVals);
+                  }
                }}>
                  <span className="premium-item-label">Select All</span>
                  <div className={`premium-checkbox ${normalizedOptions.length > 0 && selectedArray.length === normalizedOptions.length ? "checked" : ""}`}>
@@ -162,6 +196,30 @@ export function GridFilterDropdown({ label, options, value, onChange, isMulti })
               );
             })}
           </div>
+
+          {showSaveButton && (
+            <div style={{ padding: "8px 12px", borderTop: "1px solid #e2e8f0", display: "flex", justifyContent: "flex-end", background: "#f8fafc" }}>
+              <button
+                type="button"
+                style={{
+                  backgroundColor: "#176b5b",
+                  color: "#fff",
+                  border: "none",
+                  borderRadius: "4px",
+                  padding: "4px 10px",
+                  fontSize: "11px",
+                  fontWeight: "600",
+                  cursor: "pointer"
+                }}
+                onClick={() => {
+                  onChange(localValue);
+                  setIsOpen(false);
+                }}
+              >
+                Save
+              </button>
+            </div>
+          )}
         </div>
       )}
 

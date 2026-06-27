@@ -68,6 +68,7 @@ class UserOut(BaseModel):
     profile_image_url: str | None = None
     role_name: str | None = None
     permissions: list[str] = []
+    company_ids: str | None = None
 
 
 class PropertyOptionBase(BaseModel):
@@ -196,12 +197,14 @@ class CompanyOut(CompanyBase):
     created_by: int | None = None
     created_by_name: str | None = None
     assigned_to: int | None = None
+    assigned_to_ids: str | None = None  # comma-separated multi-assign user IDs
     assigned_user_name: str | None = None
     assigned_by: int | None = None
     assigned_by_name: str | None = None
     property_values: list[CompanyPropertyValueOut] = []
     history_keys: list[str] = []
     is_inquiry: bool | None = False
+
 
 
 class PaginatedCompaniesOut(BaseModel):
@@ -351,97 +354,7 @@ class HourlyReportOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
-# --- Task Management ---
 
-class TaskUserOut(BaseModel):
-    id: int
-    name: str
-    model_config = ConfigDict(from_attributes=True)
-
-
-class TaskCreate(BaseModel):
-    title: str = Field(min_length=1, max_length=255)
-    description: str | None = None
-    due_date: datetime | None = None
-    eta_hours: float = 0.0
-    assigned_to_id: int | None = None
-
-
-class TaskUpdate(BaseModel):
-    title: str | None = None
-    description: str | None = None
-    status: str | None = None
-    due_date: datetime | None = None
-    eta_hours: float | None = None
-    assigned_to_id: int | None = None
-
-
-class TaskTimerLogOut(BaseModel):
-    id: int
-    user_id: int
-    user_name: str | None = None
-    work_type: str
-    work_description: str | None = None
-    start_time: datetime
-    end_time: datetime | None = None
-    duration_seconds: int = 0
-    model_config = ConfigDict(from_attributes=True)
-
-
-class TaskHistoryOut(BaseModel):
-    id: int
-    user_id: int | None = None
-    user_name: str | None = None
-    action: str
-    details: str | None = None
-    created_at: datetime
-    model_config = ConfigDict(from_attributes=True)
-
-
-class TaskCommentCreate(BaseModel):
-    comment: str = Field(min_length=1)
-
-
-class TaskCommentOut(BaseModel):
-    id: int
-    user_id: int
-    user_name: str | None = None
-    comment: str
-    created_at: datetime
-    model_config = ConfigDict(from_attributes=True)
-
-
-class TaskNotificationOut(BaseModel):
-    id: int
-    task_id: int
-    task_title: str | None = None
-    user_id: int
-    type: str
-    message: str
-    is_read: bool
-    created_at: datetime
-    model_config = ConfigDict(from_attributes=True)
-
-
-class TaskOut(BaseModel):
-    id: int
-    title: str
-    description: str | None = None
-    status: str
-    due_date: datetime | None = None
-    eta_hours: float = 0.0
-    created_by_id: int
-    created_by: TaskUserOut
-    assigned_to_id: int | None = None
-    assigned_to: TaskUserOut | None = None
-    created_at: datetime
-    updated_at: datetime
-    can_edit_details: bool = False
-    timer_logs: list[TaskTimerLogOut] = []
-    comments: list[TaskCommentOut] = []
-    history_entries: list[TaskHistoryOut] = []
-    
-    model_config = ConfigDict(from_attributes=True)
 
 
 class VendorContactNumberOut(BaseModel):
@@ -642,6 +555,54 @@ class OurCompanyOut(OurCompanyBase):
     updated_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class EmailReportConfigBase(BaseModel):
+    smtp_host: str
+    smtp_port: int = 587
+    smtp_user: str
+    smtp_password: str
+    to_emails: list[str]
+    schedule_time: str = "20:00"
+    is_active: bool = True
+
+
+class EmailReportConfigUpdate(BaseModel):
+    smtp_host: str | None = None
+    smtp_port: int | None = None
+    smtp_user: str | None = None
+    smtp_password: str | None = None
+    to_emails: list[str] | None = None
+    schedule_time: str | None = None
+    is_active: bool | None = None
+
+
+class EmailReportConfigOut(BaseModel):
+    id: int
+    smtp_host: str
+    smtp_port: int
+    smtp_user: str
+    to_emails: list[str]
+    schedule_time: str
+    is_active: bool
+    has_password: bool
+    created_at: datetime
+    updated_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class EmailReportLogOut(BaseModel):
+    id: int
+    report_date: date
+    sent_at: datetime
+    status: str
+    error_message: str | None = None
+    recipients_count: int
+    recipients: str | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
 
 
 

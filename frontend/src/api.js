@@ -139,7 +139,13 @@ export const api = {
   importCompanies: (rows) => Promise.all(rows.map((row) => request("/companies", { method: "POST", body: JSON.stringify(row) }))),
   createCompany: (data) => request("/companies", { method: "POST", body: JSON.stringify(data) }),
   updateCompany: (id, data) => request(`/companies/${id}`, { method: "PUT", body: JSON.stringify(data) }),
-  assignCompany: (id, userId) => request(`/companies/${id}/assign${userId ? `?user_id=${userId}` : ""}`, { method: "POST" }),
+  assignCompany: (id, userId, assignedToIds) => {
+    const params = new URLSearchParams();
+    if (userId) params.append("user_id", userId);
+    if (assignedToIds) params.append("assigned_to_ids", assignedToIds);
+    const qs = params.toString();
+    return request(`/companies/${id}/assign${qs ? `?${qs}` : ""}`, { method: "POST" });
+  },
   myLeads: (q = "") => request(`/companies/my${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   createLead: (data) => request("/leads", { method: "POST", body: JSON.stringify(data) }),
   deleteCompany: (id) => request(`/companies/${id}`, { method: "DELETE" }),
@@ -191,35 +197,7 @@ export const api = {
   sendChatMessage: (message) => request("/chat", { method: "POST", body: JSON.stringify({ message }) }),
   getChatUnreadCount: () => request("/chat/unread"),
   markChatRead: () => request("/chat/read", { method: "POST" }),
-  // Tasks
-  tasks: (params = {}) => {
-    const q = new URLSearchParams(
-      Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== "" && v !== "All")
-    ).toString();
-    return request(`/tasks${q ? `?${q}` : ""}`);
-  },
-  taskStats: (params = {}) => {
-    const q = new URLSearchParams(
-      Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== "" && v !== "All")
-    ).toString();
-    return request(`/tasks/stats${q ? `?${q}` : ""}`);
-  },
-  taskDetails: (id) => request(`/tasks/${id}`),
-  createTask: (data) => request("/tasks", { method: "POST", body: JSON.stringify(data) }),
-  updateTask: (id, data) => request(`/tasks/${id}`, { method: "PUT", body: JSON.stringify(data) }),
-  startTaskTimer: (id, workType) => request(`/tasks/${id}/timer/start?work_type=${encodeURIComponent(workType)}`, { method: "POST" }),
-  stopTaskTimer: (id, workDescription, workType = "") => request(`/tasks/${id}/timer/stop?work_description=${encodeURIComponent(workDescription)}${workType ? `&work_type=${encodeURIComponent(workType)}` : ""}`, { method: "POST" }),
-  stopActiveTaskTimer: () => request("/tasks/timer/stop-active", { method: "POST" }),
-  addTaskComment: (id, comment) => request(`/tasks/${id}/comments`, { method: "POST", body: JSON.stringify({ comment }) }),
-  taskNotifications: () => request("/tasks/notifications"),
-  markTaskNotificationRead: (id) => request(`/tasks/notifications/${id}/read`, { method: "POST" }),
-  markAllTaskNotificationsRead: () => request("/tasks/notifications/mark-read", { method: "POST" }),
-  staffReport: (params = {}) => {
-    const q = new URLSearchParams(
-      Object.entries(params).filter(([_, v]) => v !== undefined && v !== null && v !== "" && v !== "All")
-    ).toString();
-    return request(`/tasks/reports/staff${q ? `?${q}` : ""}`);
-  },
+
   importUpsertCompany: (data) => request("/companies/import-upsert", { method: "POST", body: JSON.stringify(data) }),
   vendors: (q = "") => request(`/vendors${q ? `?q=${encodeURIComponent(q)}` : ""}`),
   vendor: (id) => request(`/vendors/${id}`),
@@ -256,5 +234,10 @@ export const api = {
     if (params.industries) params.industries.forEach(i => q.append("industries", i));
     const qs = q.toString();
     return request(`/tracking/connection${qs ? `?${qs}` : ""}`);
-  }
+  },
+  reportsConfig: () => request("/reports/config"),
+  updateReportsConfig: (data) => request("/reports/config", { method: "PUT", body: JSON.stringify(data) }),
+  reportsLogs: () => request("/reports/logs"),
+  sendReportNow: (date) => request("/reports/send-now" + (date ? "?date=" + date : ""), { method: "POST" }),
+  downloadReportCsv: (date) => download("/reports/download" + (date ? "?date=" + date : ""), "Daily_Activity_Report_" + date + ".xlsx")
 };

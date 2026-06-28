@@ -31,6 +31,26 @@ def _push_notification(db: Session, requirement: Requirement, user_id: int, noti
         is_read=False,
     )
     db.add(notif)
+    db.flush()
+    db.refresh(notif)
+
+    # Broadcast notification to the specific user via WebSocket
+    try:
+        from app.modules.chat.router import send_notification_to_user_sync
+        from app.modules.requirements.schemas import NotificationOut
+        from fastapi.encoders import jsonable_encoder
+
+        # Convert to Pydantic model for serialization
+        notif_out = NotificationOut.model_validate(notif)
+        payload = {
+            "type": "notification",
+            "payload": jsonable_encoder(notif_out)
+        }
+        send_notification_to_user_sync(user_id, payload)
+    except Exception as e:
+        # Prevent websocket errors from crashing the main database transaction
+        import logging
+        logging.getLogger("uvicorn").error(f"Error broadcasting websocket notification: {e}")
 
 
 def _has_full_requirement_access(user: User) -> bool:

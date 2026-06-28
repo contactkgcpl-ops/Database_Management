@@ -209,11 +209,21 @@ def list_companies(
         if sort_key == "company_name":
             query = query.order_by(Company.company_name.desc() if direction == "DESC" else Company.company_name.asc())
         elif sort_key == "created_by_name":
-            query = query.join(Company.creator).order_by(User.name.desc() if direction == "DESC" else User.name.asc())
+            CreatorUser = aliased(User)
+            query = query.outerjoin(CreatorUser, Company.created_by == CreatorUser.id).order_by(
+                CreatorUser.name.desc() if direction == "DESC" else CreatorUser.name.asc()
+            )
         elif sort_key == "assigned_to":
             query = query.order_by(AssignedUser.name.desc() if direction == "DESC" else AssignedUser.name.asc())
         elif sort_key == "assigned_by_name":
             query = query.order_by(AssignedByUser.name.desc() if direction == "DESC" else AssignedByUser.name.asc())
+        elif sort_key == "company":
+            query = query.order_by(
+                text(
+                    " (SELECT name FROM users WHERE id = CAST(SUBSTRING_INDEX(companies.company, ',', 1) AS UNSIGNED)) "
+                    f" {direction} "
+                )
+            )
         else:
             all_props = db.query(Property).filter(Property.is_active == True).all()
             prop_map = {p.field_key: p for p in all_props}
@@ -221,9 +231,27 @@ def list_companies(
                 prop = prop_map[sort_key]
                 if not prop.is_multi_value:
                     if prop.entity_type == "company":
-                        query = query.order_by(text(f"companies.{prop.field_key} {direction}"))
+                        if prop.field_key not in Company.__table__.c:
+                            from sqlalchemy import Column, String, Float, Text
+                            col_type = String
+                            if prop.object_type == "number":
+                                col_type = Float
+                            elif prop.object_type == "textarea":
+                                col_type = Text
+                            Company.__table__.append_column(Column(prop.field_key, col_type))
+                        col = Company.__table__.c[prop.field_key]
+                        query = query.order_by(col.desc() if direction == "DESC" else col.asc())
                     elif prop.entity_type == "lead":
-                        query = query.order_by(text(f"lead_manage.{prop.field_key} {direction}"))
+                        if prop.field_key not in LeadManage.__table__.c:
+                            from sqlalchemy import Column, String, Float, Text
+                            col_type = String
+                            if prop.object_type == "number":
+                                col_type = Float
+                            elif prop.object_type == "textarea":
+                                col_type = Text
+                            LeadManage.__table__.append_column(Column(prop.field_key, col_type))
+                        col = LeadManage.__table__.c[prop.field_key]
+                        query = query.order_by(col.desc() if direction == "DESC" else col.asc())
             else:
                 query = query.order_by(Company.id.desc() if direction == "DESC" else Company.id.asc())
     else:

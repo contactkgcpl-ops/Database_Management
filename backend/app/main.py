@@ -45,6 +45,12 @@ app.mount("/uploads", StaticFiles(directory="storage/uploads"), name="uploads")
 
 @app.on_event("startup")
 def startup() -> None:
+    import asyncio
+    from app.modules.chat.router import set_main_loop
+    from sqlalchemy import text
+    
+    set_main_loop(asyncio.get_event_loop())
+
     Base.metadata.create_all(bind=engine)
     db = SessionLocal()
     try:

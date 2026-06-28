@@ -1,8 +1,23 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { Bell, CheckCheck } from "lucide-react";
-import { api } from "../api";
+import { api, tokenStore } from "../api";
 
-const POLL_INTERVAL_MS = 30_000;
+const getWsUrl = () => {
+  const token = tokenStore.get() || "";
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+  const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  let url = "";
+  
+  if (apiUrl.startsWith("http://") || apiUrl.startsWith("https://")) {
+    const tempUrl = new URL(apiUrl);
+    const wsProto = tempUrl.protocol === "https:" ? "wss:" : "ws:";
+    url = `${wsProto}//${tempUrl.host}${tempUrl.pathname}/chat/ws?token=${encodeURIComponent(token)}`;
+  } else {
+    const wsHost = window.location.host;
+    url = `${wsProtocol}//${wsHost}${apiUrl}/chat/ws?token=${encodeURIComponent(token)}`;
+  }
+  return url.replace(/([^:]\/)\/+/g, "$1");
+};
 
 export function NotificationBell({ onNavigate }) {
   const [notifications, setNotifications] = useState([]);
@@ -11,14 +26,8 @@ export function NotificationBell({ onNavigate }) {
 
   const fetchNotifications = useCallback(async () => {
     try {
-      const [reqData, taskData] = await Promise.all([
-        api.myNotifications().catch(() => []),
-        api.taskNotifications().catch(() => []),
-      ]);
-      const combined = [
-        ...reqData.map((n) => ({ ...n, source: "requirement" })),
-        ...taskData.map((n) => ({ ...n, source: "task" })),
-      ];
+      const reqData = await api.myNotifications();
+      const combined = reqData.map((n) => ({ ...n, source: "requirement" }));
       combined.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       setNotifications(combined);
     } catch {
@@ -26,12 +35,70 @@ export function NotificationBell({ onNavigate }) {
     }
   }, []);
 
-  // Poll every 30 seconds
+  // Fetch notifications once on mount
   useEffect(() => {
     fetchNotifications();
-    const interval = setInterval(fetchNotifications, POLL_INTERVAL_MS);
-    return () => clearInterval(interval);
   }, [fetchNotifications]);
+
+  // WebSocket connection & handling for real-time notifications
+  useEffect(() => {
+    let socket = null;
+    let reconnectTimeout = null;
+    let isMounted = true;
+
+    const connectWebSocket = () => {
+      if (!isMounted) return;
+
+      const wsUrl = getWsUrl();
+      console.log("NotificationBell connecting to WebSocket URL:", wsUrl);
+      socket = new WebSocket(wsUrl);
+
+      socket.onopen = () => {
+        console.log("NotificationBell WebSocket connected successfully");
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type !== "notification") return;
+
+          const notif = { ...data.payload, source: "requirement" };
+          
+          setNotifications((prev) => {
+            // Check if notification already exists in the list
+            if (prev.some((n) => n.id === notif.id && n.source === "requirement")) return prev;
+            
+            // Append and sort chronologically
+            const updated = [notif, ...prev];
+            updated.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+            return updated;
+          });
+        } catch (err) {
+          console.error("Error parsing notification WebSocket message:", err);
+        }
+      };
+
+      socket.onclose = () => {
+        console.log("NotificationBell WebSocket disconnected. Reconnecting...");
+        if (isMounted) {
+          reconnectTimeout = setTimeout(connectWebSocket, 5000);
+        }
+      };
+
+      socket.onerror = (err) => {
+        console.error("NotificationBell WebSocket error:", err);
+        socket.close();
+      };
+    };
+
+    connectWebSocket();
+
+    return () => {
+      isMounted = false;
+      if (socket) socket.close();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    };
+  }, []);
 
   // Close dropdown on outside click
   useEffect(() => {
@@ -46,26 +113,16 @@ export function NotificationBell({ onNavigate }) {
 
   const handleMarkOne = async (notif) => {
     try {
-      if (notif.source === "task") {
-        await api.markTaskNotificationRead(notif.id);
-        setNotifications((prev) => prev.filter((n) => !(n.id === notif.id && n.source === "task")));
-        setOpen(false);
-        if (onNavigate) onNavigate("tasks", notif.task_id);
-      } else {
-        await api.markNotificationRead(notif.id);
-        setNotifications((prev) => prev.filter((n) => !(n.id === notif.id && n.source === "requirement")));
-        setOpen(false);
-        if (onNavigate) onNavigate("requirements", notif.requirement?.id);
-      }
+      await api.markNotificationRead(notif.id);
+      setNotifications((prev) => prev.filter((n) => !(n.id === notif.id && n.source === "requirement")));
+      setOpen(false);
+      if (onNavigate) onNavigate("requirements", notif.requirement?.id);
     } catch {/* ignore */}
   };
 
   const handleMarkAll = async () => {
     try {
-      await Promise.all([
-        api.markAllNotificationsRead().catch(() => {}),
-        api.markAllTaskNotificationsRead().catch(() => {}),
-      ]);
+      await api.markAllNotificationsRead().catch(() => {});
       setNotifications([]);
     } catch {/* ignore */}
     setOpen(false);
@@ -125,21 +182,19 @@ export function NotificationBell({ onNavigate }) {
                   </span>
                   <div className="notif-content">
                     <span className="notif-title">
-                      {notif.source === "task"
-                        ? notif.message
-                        : notif.type === "completed"
+                      {notif.type === "completed"
                         ? `Your requirement is done!`
                         : `New requirement assigned to you`}
                     </span>
                     <span className="notif-subtitle">
-                      {notif.source === "task" ? notif.task_title : notif.requirement?.title}
+                      {notif.requirement?.title}
                     </span>
-                    {notif.source === "requirement" && notif.type === "completed" && notif.requirement?.assigned_to && (
+                    {notif.type === "completed" && notif.requirement?.assigned_to && (
                       <span className="notif-meta">
                         Completed by {notif.requirement.assigned_to.name}
                       </span>
                     )}
-                    {notif.source === "requirement" && notif.type === "assigned" && notif.requirement?.added_by && (
+                    {notif.type === "assigned" && notif.requirement?.added_by && (
                       <span className="notif-meta">
                         From {notif.requirement.added_by.name}
                       </span>

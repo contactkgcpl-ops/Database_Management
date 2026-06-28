@@ -69,19 +69,37 @@ def attendance_report(
     return get_attendance_report(db, start, end, user_id)
 
 
+def broadcast_time_log(user_id: int, log_out):
+    try:
+        from app.modules.chat.router import send_notification_to_user_sync
+        from fastapi.encoders import jsonable_encoder
+        send_notification_to_user_sync(user_id, {
+            "type": "time_log",
+            "payload": jsonable_encoder(log_out)
+        })
+    except Exception:
+        pass
+
+
 @router.post("/login", response_model=UserTimeLogOut)
 def mark_login(db: Session = Depends(get_db), user: User = Depends(current_user)):
-    return to_time_log_out(start_day_log(db, user))
+    log_out = to_time_log_out(start_day_log(db, user))
+    broadcast_time_log(user.id, log_out)
+    return log_out
 
 
 @router.post("/logout", response_model=UserTimeLogOut)
 def mark_logout(db: Session = Depends(get_db), user: User = Depends(current_user)):
-    return to_time_log_out(close_day_log(db, user))
+    log_out = to_time_log_out(close_day_log(db, user))
+    broadcast_time_log(user.id, log_out)
+    return log_out
 
 
 @router.post("/resume", response_model=UserTimeLogOut)
 def resume_time(db: Session = Depends(get_db), user: User = Depends(current_user)):
-    return to_time_log_out(start_day_log(db, user))
+    log_out = to_time_log_out(start_day_log(db, user))
+    broadcast_time_log(user.id, log_out)
+    return log_out
 
 
 @router.post("/break/start", response_model=UserTimeLogOut)
@@ -89,7 +107,9 @@ def start_user_break(
     db: Session = Depends(get_db),
     user: User = Depends(require_any_permission("time.break", "time.view", "time.manage")),
 ):
-    return to_time_log_out(start_break(db, user))
+    log_out = to_time_log_out(start_break(db, user))
+    broadcast_time_log(user.id, log_out)
+    return log_out
 
 
 @router.post("/break/end", response_model=UserTimeLogOut)
@@ -97,4 +117,6 @@ def end_user_break(
     db: Session = Depends(get_db),
     user: User = Depends(require_any_permission("time.break", "time.view", "time.manage")),
 ):
-    return to_time_log_out(end_break(db, user))
+    log_out = to_time_log_out(end_break(db, user))
+    broadcast_time_log(user.id, log_out)
+    return log_out

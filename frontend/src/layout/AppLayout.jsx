@@ -129,12 +129,32 @@ export function AppLayout({ page, setPage }) {
         .catch(() => { });
     };
     loadToday();
-    const refreshId = window.setInterval(loadToday, 30000);
+    
+    // Poll every 5 minutes instead of every 30 seconds
+    const refreshId = window.setInterval(loadToday, 300000);
     const tickId = window.setInterval(() => setTimeTick((current) => current + 1), 1000);
+
+    // Refresh instantly when the browser window/tab is focused
+    const handleFocus = () => {
+      loadToday();
+    };
+    window.addEventListener("focus", handleFocus);
+
+    // Listen for WebSocket-pushed time log updates
+    const handleWsTimeLogUpdate = (e) => {
+      if (!cancelled) {
+        setTimeLog(e.detail);
+        setFetchTime(Date.now());
+      }
+    };
+    window.addEventListener("erp:timelog", handleWsTimeLogUpdate);
+
     return () => {
       cancelled = true;
       window.clearInterval(refreshId);
       window.clearInterval(tickId);
+      window.removeEventListener("focus", handleFocus);
+      window.removeEventListener("erp:timelog", handleWsTimeLogUpdate);
     };
   }, [canUseTime]);
 
@@ -206,6 +226,7 @@ export function AppLayout({ page, setPage }) {
     } catch (err) {
       console.error(err);
     }
+    localStorage.removeItem("erp_current_page");
     logout();
   };
 

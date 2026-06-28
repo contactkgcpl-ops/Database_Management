@@ -11,11 +11,27 @@ function MainApp() {
   const initialPage = React.useMemo(() => {
     const canOpen = (item) => user.permissions.includes(item.permission) || user.permissions.includes(item.alternatePermission);
     const flatNav = navigation.flatMap((item) => item.children || [item]);
+    
+    const saved = localStorage.getItem("erp_current_page");
+    if (saved) {
+      const item = flatNav.find((i) => i.page === saved);
+      if (item && canOpen(item)) {
+        return saved;
+      }
+    }
+    
     const firstAllowed = flatNav.find(canOpen);
     return firstAllowed ? firstAllowed.page : "dashboard";
   }, [user]);
 
   const [page, setPage] = React.useState(initialPage);
+
+  React.useEffect(() => {
+    if (page) {
+      localStorage.setItem("erp_current_page", page);
+    }
+  }, [page]);
+
   return <AppLayout page={page} setPage={setPage} />;
 }
 

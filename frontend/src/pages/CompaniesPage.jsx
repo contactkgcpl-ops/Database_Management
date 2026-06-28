@@ -121,6 +121,7 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
+  const [bulkAssignUser, setBulkAssignUser] = useState("");
 
   const toggleCompanySelection = (id) => {
     const cid = Number(id);
@@ -144,6 +145,53 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
       companies.reload();
     } catch (err) {
       notify("Failed to delete selected companies", "error");
+    }
+  };
+
+  const submitBulkAssignCompany = async () => {
+    if (!selectedCompanyIds.length) {
+      notify("Select at least one company", "error");
+      return;
+    }
+    if (!bulkAssignUser) {
+      notify("Select an assignee first", "error");
+      return;
+    }
+
+    const companyProperty = properties.data?.find(p => p.field_key === "company");
+    if (!companyProperty) {
+      notify("Company property config not found", "error");
+      return;
+    }
+
+    try {
+      const results = await Promise.all(
+        selectedCompanyIds.map(companyId =>
+          api.updateCompanyInline(companyId, {
+            property_id: companyProperty.id,
+            value: bulkAssignUser
+          })
+        )
+      );
+      
+      notify("Bulk data assignment updated successfully", "success");
+      setSelectedCompanyIds([]);
+      setBulkAssignUser("");
+      
+      companies.setData((prev) => {
+        const updateMap = new Map(results.map(r => [r.id, r]));
+        if (Array.isArray(prev)) {
+          return prev.map((c) => (updateMap.has(c.id) ? updateMap.get(c.id) : c));
+        } else if (prev && typeof prev === "object") {
+          return {
+            ...prev,
+            companies: (prev.companies || []).map((c) => (updateMap.has(c.id) ? updateMap.get(c.id) : c)),
+          };
+        }
+        return prev;
+      });
+    } catch (err) {
+      notify("Failed to update bulk assignment", "error");
     }
   };
 
@@ -566,6 +614,51 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
                 <button type="button" className="bulk-link" onClick={() => setSelectedCompanyIds([])} style={{ background: 'none', border: 'none', color: '#64748b', cursor: 'pointer', fontSize: '12px', fontWeight: '600' }}>Unselect all</button>
                 <strong style={{ fontSize: '13px', color: '#1e293b' }}>{selectedCompanyIds.length}</strong>
                 <span style={{ fontSize: '13px', color: '#64748b' }}>Items Selected</span>
+                
+                {canManage && (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginLeft: '24px' }}>
+                    <select
+                      value={bulkAssignUser}
+                      onChange={(e) => setBulkAssignUser(e.target.value)}
+                      style={{
+                        padding: "4px 8px",
+                        fontSize: "12px",
+                        border: "1px solid #ccd7d3",
+                        borderRadius: "6px",
+                        backgroundColor: "#fff",
+                        color: "#475569",
+                        height: "30px",
+                        outline: "none",
+                        cursor: "pointer"
+                      }}
+                    >
+                      <option value="">-- Bulk Assign Data --</option>
+                      <option value="unassigned">Unassigned Data</option>
+                      {users.data?.filter(u => u.company_ids && u.company_ids.trim()).map(u => (
+                        <option key={u.id} value={String(u.id)}>{u.name}</option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={submitBulkAssignCompany}
+                      disabled={!bulkAssignUser}
+                      style={{
+                        backgroundColor: bulkAssignUser ? "#176b5b" : "#cbd5e1",
+                        color: "#fff",
+                        border: "none",
+                        padding: "6px 12px",
+                        borderRadius: "6px",
+                        fontSize: "12px",
+                        fontWeight: "600",
+                        cursor: bulkAssignUser ? "pointer" : "default",
+                        height: "30px"
+                      }}
+                    >
+                      Assign Data
+                    </button>
+                  </div>
+                )}
+                
                 <button type="button" className="bulk-submit danger" onClick={submitBulkDelete} style={{ marginLeft: "auto", background: "#ef4444", color: "#fff", border: "none", padding: "6px 12px", borderRadius: "6px", fontSize: "12px", fontWeight: "600", cursor: "pointer" }}>Delete Selected</button>
               </div>
             )}

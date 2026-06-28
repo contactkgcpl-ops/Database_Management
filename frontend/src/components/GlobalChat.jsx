@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from "react";
 import { MessageSquare, X, Send } from "lucide-react";
-import { api } from "../api";
+import { api, tokenStore } from "../api";
 import { useAuth } from "../context/AuthContext";
 
 function parseUTCDate(val) {
@@ -21,6 +21,23 @@ function parseUTCDate(val) {
   return new Date(val);
 }
 
+const getWsUrl = () => {
+  const token = tokenStore.get() || "";
+  const apiUrl = import.meta.env.VITE_API_URL || "http://localhost:8000/api";
+  const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+  let url = "";
+  
+  if (apiUrl.startsWith("http://") || apiUrl.startsWith("https://")) {
+    const tempUrl = new URL(apiUrl);
+    const wsProto = tempUrl.protocol === "https:" ? "wss:" : "ws:";
+    url = `${wsProto}//${tempUrl.host}${tempUrl.pathname}/chat/ws?token=${encodeURIComponent(token)}`;
+  } else {
+    const wsHost = window.location.host;
+    url = `${wsProtocol}//${wsHost}${apiUrl}/chat/ws?token=${encodeURIComponent(token)}`;
+  }
+  return url.replace(/([^:]\/)\/+/g, "$1");
+};
+
 export function GlobalChat() {
   const { user } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
@@ -35,39 +52,121 @@ export function GlobalChat() {
   
   const chatEndRef = useRef(null);
   const inputRef = useRef(null);
+  const wsRef = useRef(null);
 
-  // Poll for unread count when closed, or messages when open
+  const isOpenRef = useRef(isOpen);
   useEffect(() => {
-    let intervalId;
-    
-    const fetchUnread = async () => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  const userRef = useRef(user);
+  useEffect(() => {
+    userRef.current = user;
+  }, [user]);
+
+  // Fetch initial unread count on mount
+  useEffect(() => {
+    const fetchInitialUnread = async () => {
       try {
         const res = await api.getChatUnreadCount();
         setUnreadCount(res.unread_count);
       } catch (err) {}
     };
+    fetchInitialUnread();
+  }, []);
 
-    const fetchMessages = async () => {
-      try {
-        const res = await api.getChatMessages();
-        setMessages(res);
-        if (isOpen) {
+  // Fetch messages when chat is opened
+  useEffect(() => {
+    if (isOpen) {
+      const fetchMessages = async () => {
+        try {
+          const res = await api.getChatMessages();
+          setMessages(res);
           api.markChatRead().catch(() => {});
           setUnreadCount(0);
+        } catch (err) {}
+      };
+      fetchMessages();
+    } else {
+      api.markChatRead().catch(() => {});
+    }
+  }, [isOpen]);
+
+  // WebSocket connection & handling
+  useEffect(() => {
+    let socket = null;
+    let reconnectTimeout = null;
+    let isMounted = true;
+
+    const connectWebSocket = () => {
+      if (!isMounted) return;
+
+      const wsUrl = getWsUrl();
+      console.log("GlobalChat connecting to WebSocket URL:", wsUrl);
+      socket = new WebSocket(wsUrl);
+      wsRef.current = socket;
+
+      socket.onopen = () => {
+        console.log("GlobalChat WebSocket connected successfully");
+      };
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === "time_log") {
+            window.dispatchEvent(new CustomEvent("erp:timelog", { detail: data.payload }));
+            return;
+          }
+          
+          if (data.type !== "chat") return;
+
+          const message = data.payload;
+          
+          setMessages((prev) => {
+            if (prev.some((m) => m.id === message.id)) return prev;
+            return [...prev, message];
+          });
+
+          if (isOpenRef.current) {
+            setUnreadCount(0);
+          } else {
+            const isMe = message.user_id === userRef.current?.id;
+            if (!isMe) {
+              setUnreadCount((prev) => prev + 1);
+            }
+          }
+        } catch (err) {
+          console.error("Error parsing WebSocket message:", err);
         }
-      } catch (err) {}
+      };
+
+      socket.onclose = () => {
+        console.log("GlobalChat WebSocket disconnected. Reconnecting...");
+        wsRef.current = null;
+        if (isMounted) {
+          reconnectTimeout = setTimeout(connectWebSocket, 5000);
+        }
+      };
+
+      socket.onerror = (err) => {
+        console.error("GlobalChat WebSocket error:", err);
+        socket.close();
+      };
     };
 
-    if (isOpen) {
-      fetchMessages();
-      intervalId = setInterval(fetchMessages, 5000);
-    } else {
-      fetchUnread();
-      intervalId = setInterval(fetchUnread, 10000);
-    }
+    connectWebSocket();
 
-    return () => clearInterval(intervalId);
-  }, [isOpen]);
+    return () => {
+      isMounted = false;
+      if (socket) {
+        socket.close();
+      }
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+      }
+    };
+  }, []);
 
   // Fetch users for mentions once
   useEffect(() => {
@@ -86,24 +185,40 @@ export function GlobalChat() {
   const handleOpen = () => {
     setIsOpen(true);
     setUnreadCount(0);
-    api.markChatRead().catch(() => {});
   };
 
   const handleSend = async (e) => {
     e.preventDefault();
     if (!inputValue.trim()) return;
-    setSending(true);
-    try {
-      await api.sendChatMessage(inputValue);
-      setInputValue("");
-      setShowMentions(false);
-      // Immediately fetch to show our message
-      const res = await api.getChatMessages();
-      setMessages(res);
-    } catch (err) {
-    } finally {
-      setSending(false);
-      inputRef.current?.focus();
+    
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      setSending(true);
+      try {
+        wsRef.current.send(JSON.stringify({ message: inputValue }));
+        setInputValue("");
+        setShowMentions(false);
+      } catch (err) {
+        console.error("Failed to send message via WebSocket:", err);
+      } finally {
+        setSending(false);
+        inputRef.current?.focus();
+      }
+    } else {
+      console.warn("WebSocket is closed, falling back to HTTP API");
+      setSending(true);
+      try {
+        const newMsg = await api.sendChatMessage(inputValue);
+        setInputValue("");
+        setShowMentions(false);
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === newMsg.id)) return prev;
+          return [...prev, newMsg];
+        });
+      } catch (err) {
+      } finally {
+        setSending(false);
+        inputRef.current?.focus();
+      }
     }
   };
 

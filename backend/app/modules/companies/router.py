@@ -103,13 +103,13 @@ def list_my_leads(
             LeadManage.is_inquiry != True
         )
         
-        or_conds = []
+        or_conds = [LeadManage.assigned_to_id.in_(allowed_user_ids)]
         for uid in allowed_user_ids:
             uid_str = str(uid)
-            or_conds.append(text(f"companies.company = '{uid_str}'"))
-            or_conds.append(text(f"companies.company LIKE '{uid_str},%'"))
-            or_conds.append(text(f"companies.company LIKE '%,{uid_str}'"))
-            or_conds.append(text(f"companies.company LIKE '%,{uid_str},%'"))
+            or_conds.append(LeadManage.assigned_to_ids == uid_str)
+            or_conds.append(LeadManage.assigned_to_ids.like(f"{uid_str},%"))
+            or_conds.append(LeadManage.assigned_to_ids.like(f"%,{uid_str}"))
+            or_conds.append(LeadManage.assigned_to_ids.like(f"%,{uid_str},%"))
         query = query.filter(or_(*or_conds))
         if q:
             term = f"%{q.strip()}%"

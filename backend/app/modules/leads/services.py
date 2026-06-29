@@ -1,4 +1,4 @@
-from sqlalchemy import text
+from sqlalchemy import text, or_
 from sqlalchemy.orm import Session
 from app.models import Company, LeadManage, Property, User, CompanyPropertyValue
 from app.modules.companies.services import to_company_out, company_query
@@ -7,9 +7,25 @@ def list_leads(db: Session, q: str | None = None, assigned_to: int | list[int] |
     query = db.query(Company).join(LeadManage)
     if assigned_to is not None:
         if isinstance(assigned_to, list):
-            query = query.filter(LeadManage.assigned_to_id.in_(assigned_to))
+            or_conds = [LeadManage.assigned_to_id.in_(assigned_to)]
+            for uid in assigned_to:
+                uid_str = str(uid)
+                or_conds.append(LeadManage.assigned_to_ids == uid_str)
+                or_conds.append(LeadManage.assigned_to_ids.like(f"{uid_str},%"))
+                or_conds.append(LeadManage.assigned_to_ids.like(f"%,{uid_str}"))
+                or_conds.append(LeadManage.assigned_to_ids.like(f"%,{uid_str},%"))
+            query = query.filter(or_(*or_conds))
         else:
-            query = query.filter(LeadManage.assigned_to_id == assigned_to)
+            uid_str = str(assigned_to)
+            query = query.filter(
+                or_(
+                    LeadManage.assigned_to_id == assigned_to,
+                    LeadManage.assigned_to_ids == uid_str,
+                    LeadManage.assigned_to_ids.like(f"{uid_str},%"),
+                    LeadManage.assigned_to_ids.like(f"%,{uid_str}"),
+                    LeadManage.assigned_to_ids.like(f"%,{uid_str},%")
+                )
+            )
             
     if q:
         term = f"%{q.strip()}%"

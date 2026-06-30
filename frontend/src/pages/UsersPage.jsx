@@ -68,7 +68,7 @@ const columnDefs = [
   ["department", "Department"],
   ["senior", "Senior / Parent User"],
   ["team", "Team Members Under Them"],
-  ["role", "Role"],
+  ["company_ids", "Assigned Companies"],
   ["last_login", "Last Login"],
   ["status", "Status"],
 ];

@@ -3925,3 +3925,62 @@ form.compact-user-form .modal-actions button {
 .spin {
   animation: spin 0.8s linear infinite;
 }
+
+/* ── Compact styling for MultiSelect inside grid cells ── */
+.company-table td .multi-select-field {
+  margin: 0;
+  padding: 0;
+}
+
+.company-table td .premium-select-control {
+  min-height: 28px;
+  border-radius: 4px;
+  padding: 2px 8px;
+  border-color: #ccd7d3;
+}
+
+.company-table td .premium-select-content {
+  gap: 4px;
+}
+
+.company-table td .premium-chips {
+  gap: 3px;
+}
+
+.company-table td .premium-chip {
+  padding: 1px 4px;
+  font-size: 10px;
+  border-radius: 3px;
+  gap: 3px;
+}
+
+.company-table td .premium-placeholder {
+  font-size: 11px;
+}
+
+.company-table td .premium-dropdown {
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.company-table td .premium-search-wrap {
+  padding: 6px 8px;
+}
+
+.company-table td .premium-list {
+  max-height: 180px;
+}
+
+.company-table td .premium-item {
+  padding: 6px 8px;
+}
+
+/* Ensure the active/focused grid cell sits on top of other cells/rows */
+.company-table td {
+  position: relative;
+}
+
+.company-table td:hover,
+.company-table td:focus-within {
+  z-index: 100 !important;
+}

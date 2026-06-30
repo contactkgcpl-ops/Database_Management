@@ -17,6 +17,91 @@ def company_query(db: Session):
         joinedload(Company.lead_assignments).joinedload(LeadManage.assigned_by),
     )
 
+def sync_company_assignment_from_column(db: Session, company: Company, company_column_val: str, assigned_by_id: int | None = None):
+    val = (company_column_val or "").strip()
+    if not val or val == "unassigned":
+        # Clear assignment
+        assignment = db.query(LeadManage).filter(LeadManage.company_id == company.id).first()
+        if assignment:
+            old_assigned_to = assignment.assigned_to_id
+            assignment.assigned_to_id = None
+            assignment.assigned_to_ids = None
+            
+            # History log
+            if old_assigned_to:
+                from app.models import LeadHistory
+                old_u = db.query(User).get(old_assigned_to)
+                old_user_name = old_u.name if old_u else ""
+                history = LeadHistory(
+                    company_id=company.id,
+                    property_key="assigned_to",
+                    property_name="Assigned To",
+                    old_value=old_user_name,
+                    new_value="Unassigned",
+                    user_id=assigned_by_id
+                )
+                db.add(history)
+            
+            db.commit()
+        return
+        
+    # We have user IDs
+    parts = [p.strip() for p in val.split(",") if p.strip()]
+    user_ids = []
+    for p in parts:
+        try:
+            user_ids.append(int(p))
+        except ValueError:
+            pass
+            
+    if not user_ids:
+        return
+        
+    primary_user_id = user_ids[0]
+    
+    assignment = db.query(LeadManage).filter(LeadManage.company_id == company.id).first()
+    old_assigned_to = assignment.assigned_to_id if assignment else None
+    
+    if not assignment:
+        assignment = LeadManage(company_id=company.id)
+        db.add(assignment)
+        
+    if assignment.assigned_to_id != primary_user_id or assignment.assigned_to_ids != ",".join(str(i) for i in user_ids):
+        assignment.assigned_to_id = primary_user_id
+        assignment.assigned_to_ids = ",".join(str(i) for i in user_ids)
+        if assigned_by_id:
+            assignment.assigned_by_id = assigned_by_id
+            
+        # Add history log
+        old_user_name = ""
+        if old_assigned_to:
+            old_u = db.query(User).get(old_assigned_to)
+            old_user_name = old_u.name if old_u else ""
+            
+        new_user_name = ""
+        new_u = db.query(User).get(primary_user_id)
+        new_user_name = new_u.name if new_u else ""
+        
+        from app.models import LeadHistory
+        history = LeadHistory(
+            company_id=company.id,
+            property_key="assigned_to",
+            property_name="Assigned To",
+            old_value=old_user_name,
+            new_value=new_user_name,
+            user_id=assigned_by_id
+        )
+        db.add(history)
+        
+    # Update pending follow-ups
+    from app.models import LeadFollowUp
+    db.query(LeadFollowUp).filter(
+        LeadFollowUp.company_id == company.id,
+        LeadFollowUp.status.in_(["Pending", "Re Follow Up"])
+    ).update({"assigned_to_id": primary_user_id}, synchronize_session=False)
+    
+    db.commit()
+
 def list_companies(
     db: Session,
     page: int = 1,
@@ -435,6 +520,12 @@ def apply_company_payload(db: Session, company: Company, payload: CompanyCreate 
                     company.property_values.append(CompanyPropertyValue(property_id=prop.id, value=s))
         else:
             dynamic_data[prop.field_key] = pv.value.strip()
+
+    if "verification_status" not in dynamic_data or not str(dynamic_data["verification_status"]).strip():
+        dynamic_data["verification_status"] = "pending"
+    if "company" not in dynamic_data or not str(dynamic_data["company"]).strip():
+        dynamic_data["company"] = "unassigned"
+
     return dynamic_data, lead_dynamic_data
 
 def create_company(db: Session, payload: CompanyCreate, user: User) -> Company:
@@ -449,6 +540,8 @@ def create_company(db: Session, payload: CompanyCreate, user: User) -> Company:
         set_clause = ", ".join([f"{k} = :{k}" for k in dynamic_data.keys()])
         db.execute(text(f"UPDATE companies SET {set_clause} WHERE id = :id"), {"id": company.id, **dynamic_data})
         db.commit()
+        if "company" in dynamic_data:
+            sync_company_assignment_from_column(db, company, dynamic_data["company"], assigned_by_id=user.id)
 
     if lead_dynamic_data:
         # Leads added as company might need an initial assignment if they have lead properties
@@ -479,6 +572,8 @@ def update_company(db: Session, company: Company, payload: CompanyUpdate) -> Com
         set_clause = ", ".join([f"{k} = :{k}" for k in dynamic_data.keys()])
         db.execute(text(f"UPDATE companies SET {set_clause} WHERE id = :id"), {"id": company.id, **dynamic_data})
         db.commit()
+        if "company" in dynamic_data:
+            sync_company_assignment_from_column(db, company, dynamic_data["company"], assigned_by_id=None)
         
     db.refresh(company)
     return get_company(db, company.id) or company
@@ -582,10 +677,9 @@ def to_company_out(db: Session, company: Company, for_user_id: int | None = None
     
     property_values = list(pv_map.values())
     
+    prop_id_map = {p.field_key: p.id for p in db.query(Property.id, Property.field_key).filter(Property.is_active == True, Property.entity_type == "company").all()}
+    
     if raw_row:
-        # Pre-fetch property IDs for dynamic columns to help frontend mapping
-        prop_id_map = {p.field_key: p.id for p in db.query(Property.id, Property.field_key).filter(Property.is_active == True, Property.entity_type == "company").all()}
-        
         for key, val in raw_row.items():
             if key not in core_cols and val is not None:
                 if not any(pv["field_key"] == key for pv in property_values):
@@ -596,6 +690,31 @@ def to_company_out(db: Session, company: Company, for_user_id: int | None = None
                         "property_name": key.replace("_", " ").title(),
                         "field_key": key,
                     })
+
+    # Ensure verification_status and company are in property_values with default values if they are missing or empty
+    ver_status_pv = next((pv for pv in property_values if pv["field_key"] == "verification_status"), None)
+    if not ver_status_pv:
+        property_values.append({
+            "id": 0,
+            "property_id": prop_id_map.get("verification_status", 0),
+            "value": "pending",
+            "property_name": "Verification Status",
+            "field_key": "verification_status"
+        })
+    elif not ver_status_pv["value"] or not ver_status_pv["value"].strip():
+        ver_status_pv["value"] = "pending"
+
+    company_pv = next((pv for pv in property_values if pv["field_key"] == "company"), None)
+    if not company_pv:
+        property_values.append({
+            "id": 0,
+            "property_id": prop_id_map.get("company", 0),
+            "value": "unassigned",
+            "property_name": "Assign Data",
+            "field_key": "company"
+        })
+    elif not company_pv["value"] or not company_pv["value"].strip():
+        company_pv["value"] = "unassigned"
 
     # Get latest assignment info
     assignment = None
@@ -695,6 +814,31 @@ def update_property_inline(db: Session, company_id: int, payload: InlineProperty
     if not company:
         raise ValueError("Company not found")
         
+    if payload.property_id == 0:
+        old_value = company.company_name or ""
+        new_val = payload.value.strip()
+        if not new_val:
+            raise ValueError("Company Name cannot be empty")
+            
+        company.company_name = new_val
+        db.commit()
+        db.refresh(company)
+        
+        if old_value != new_val:
+            history = LeadHistory(
+                company_id=company.id,
+                property_key="company_name",
+                property_name="Company Name",
+                old_value=old_value,
+                new_value=new_val,
+                remark=payload.remark,
+                user_id=user.id
+            )
+            db.add(history)
+            db.commit()
+            
+        return company
+
     prop = db.query(Property).get(payload.property_id)
     if not prop:
         raise ValueError("Property not found")
@@ -754,6 +898,9 @@ def update_property_inline(db: Session, company_id: int, payload: InlineProperty
                 db.add(CompanyPropertyValue(company_id=company.id, property_id=prop.id, value=s))
     else:
         db.execute(text(f"UPDATE companies SET {prop.field_key} = :val WHERE id = :cid"), {"val": new_val, "cid": company.id})
+        db.commit()
+        if prop.field_key == "company":
+            sync_company_assignment_from_column(db, company, new_val, assigned_by_id=user.id)
         
     # Handle follow up date if provided
     if payload.follow_up_date is not None:
@@ -904,6 +1051,46 @@ def import_upsert_company(db: Session, payload: CompanyImportUpsert, user: User)
             db.add(history)
             
     db.commit()
+    
+    # Ensure verification_status and company defaults are set if they are null or empty
+    raw_row = db.execute(text("SELECT verification_status, company FROM companies WHERE id = :id"), {"id": company.id}).mappings().first()
+    updates = {}
+    if raw_row:
+        if not raw_row.get("verification_status") or not str(raw_row.get("verification_status")).strip():
+            updates["verification_status"] = "pending"
+        if not raw_row.get("company") or not str(raw_row.get("company")).strip():
+            updates["company"] = "unassigned"
+            
+    if updates:
+        set_clause = ", ".join([f"{k} = :{k}" for k in updates.keys()])
+        db.execute(text(f"UPDATE companies SET {set_clause} WHERE id = :id"), {"id": company.id, **updates})
+        db.commit()
+
+    raw_row = db.execute(text("SELECT company FROM companies WHERE id = :id"), {"id": company.id}).mappings().first()
+    if raw_row and raw_row.get("company"):
+        sync_company_assignment_from_column(db, company, raw_row.get("company"), assigned_by_id=user.id)
+
     db.refresh(company)
     return get_company(db, company.id)
+
+
+def get_user_names_by_ids(db: Session, id_str: str | None) -> str:
+    if not id_str:
+        return ""
+    from app.models import User
+    ids = []
+    for x in str(id_str).split(","):
+        s = x.strip()
+        if s.isdigit():
+            ids.append(int(s))
+    if not ids:
+        return str(id_str)
+    users = db.query(User).filter(User.id.in_(ids)).all()
+    user_map = {u.id: u.name for u in users}
+    result = []
+    for uid in ids:
+        if uid in user_map:
+            result.append(user_map[uid])
+    return ", ".join(result) if result else str(id_str)
+
 

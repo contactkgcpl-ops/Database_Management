@@ -261,6 +261,8 @@ class LeadHistoryOut(BaseModel):
     user_id: int | None = None
     user_name: str | None = None
     created_at: datetime
+    our_company_ids: str | None = None
+    our_company_names: str | None = None
 
 class LeadFollowUpOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)

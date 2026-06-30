@@ -59,13 +59,11 @@ DEFAULT_PROPERTIES = [
     ("Description", "description", "textarea", "custom", "", False, False, False, "company", "text", True, 60, 0),
     ("Verification Status", "verification_status", "dropdown", "custom", "Company verification status", False, False, False, "company", "dropdown", True, 15, 0),
     ("Assign Data", "company", "multiselect", "custom", "Our Company", False, False, False, "company", "multiselect", True, 25, 0),
-    ("Cold Leads Status", "status", "dropdown", "custom", "", False, False, False, "lead", "dropdown", True, 2, 0),
+    ("Status", "status", "dropdown", "custom", "", False, False, False, "lead", "dropdown", True, 2, 0),
     ("Connected Source", "connected_source", "multiselect", "custom", "Lead connected source", False, False, False, "lead", "multiselect", True, 3, 0),
-    ("Inquiry No", "inquiry_no", "text", "custom", "Inquiry Number", False, False, False, "lead", "text", True, 10, 0),
+    ("Client Replay", "client_replay", "text", "custom", "Client Replay", False, False, False, "lead", "text", True, 4, 0),
     ("Contact Person", "contact_person", "text", "custom", "Contact Person Name", False, False, False, "lead", "text", True, 11, 0),
     ("Inquiry Source", "inquiry_source", "dropdown", "custom", "Source of Inquiry", False, False, False, "lead", "dropdown", True, 13, 0),
-    ("Order Amount", "order_amount", "number", "custom", "Order Amount", False, False, False, "lead", "number", True, 14, 0),
-    ("Requirement", "requirement", "text", "custom", "Lead/Inquiry requirement details", False, False, False, "lead", "text", True, 15, 0),
 ]
 DEFAULT_GRIDS = [
     ("companies", "Companies", True, 10),
@@ -127,6 +125,18 @@ def ensure_dynamic_column(db: Session, prop: Property) -> None:
 
     columns = {column["name"] for column in inspector.get_columns(table_name)}
     if prop.field_key in columns:
+        if prop.field_key == "verification_status":
+            try:
+                db.execute(text(f"ALTER TABLE {table_name} ALTER COLUMN {prop.field_key} SET DEFAULT 'pending'"))
+                db.commit()
+            except Exception:
+                db.rollback()
+        elif prop.field_key == "company":
+            try:
+                db.execute(text(f"ALTER TABLE {table_name} ALTER COLUMN {prop.field_key} SET DEFAULT 'unassigned'"))
+                db.commit()
+            except Exception:
+                db.rollback()
         return
 
     column_type = "TEXT"
@@ -134,7 +144,14 @@ def ensure_dynamic_column(db: Session, prop: Property) -> None:
         column_type = "INTEGER"
     elif prop.object_type == "boolean":
         column_type = "BOOLEAN"
-    db.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {prop.field_key} {column_type}"))
+
+    default_clause = ""
+    if prop.field_key == "verification_status":
+        default_clause = " DEFAULT 'pending'"
+    elif prop.field_key == "company":
+        default_clause = " DEFAULT 'unassigned'"
+
+    db.execute(text(f"ALTER TABLE {table_name} ADD COLUMN {prop.field_key} {column_type}{default_clause}"))
 
 
 def seed_property_options(db: Session, prop: Property) -> None:
@@ -272,6 +289,36 @@ def seed_defaults(db: Session) -> None:
         ensure_dynamic_column(db, prop)
     db.commit()
 
+    # Delete properties not in DEFAULT_PROPERTIES and drop their columns
+    valid_field_keys = [p[1] for p in DEFAULT_PROPERTIES]
+    to_delete = db.query(Property).filter(Property.field_key.notin_(valid_field_keys)).all()
+    for prop in to_delete:
+        table_name = "companies" if prop.entity_type == "company" else "lead_manage"
+        try:
+            inspector = inspect(engine)
+            columns = [c["name"] for c in inspector.get_columns(table_name)]
+            if prop.field_key in columns:
+                db.execute(text(f"ALTER TABLE {table_name} DROP COLUMN {prop.field_key}"))
+                db.commit()
+                print(f"Dropped column {prop.field_key} from {table_name}")
+        except Exception as ex:
+            print(f"Error dropping column {prop.field_key}: {ex}")
+        db.delete(prop)
+    db.commit()
+
     # Initialize verification_status to pending for existing companies
     db.execute(text("UPDATE companies SET verification_status = 'pending' WHERE verification_status IS NULL OR verification_status = ''"))
+    # Initialize company (Assign Data) to unassigned for existing companies
+    db.execute(text("UPDATE companies SET company = 'unassigned' WHERE company IS NULL OR company = ''"))
     db.commit()
+
+    # Check if our_company_ids column exists in lead_history
+    try:
+        inspector = inspect(engine)
+        columns = [c["name"] for c in inspector.get_columns("lead_history")]
+        if "our_company_ids" not in columns:
+            db.execute(text("ALTER TABLE lead_history ADD COLUMN our_company_ids TEXT NULL"))
+            db.commit()
+            print("Added column our_company_ids to lead_history")
+    except Exception as ex:
+        print(f"Error adding column our_company_ids: {ex}")

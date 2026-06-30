@@ -9,18 +9,21 @@ import { useAuth } from "../context/AuthContext";
 import { useLoad } from "../hooks/useLoad";
 import { Pagination } from "../components/Pagination";
 import { orderedVisibleColumns, readColumnKeys, writeColumnKeys } from "../utils/columnConfig";
+import { MultiSelect } from "../components/MultiSelect";
 
 const MY_LEADS_COLUMN_STORAGE_KEY = "crm.grid.columns.my_leads";
+let usersGlobal = [];
+
 const MY_LEADS_STATIC_COLUMNS = [
   { id: 0, name: "Lead / Company Name", field_key: "company_name", grids: [{ grid_key: "my_leads", grid_width: 200, grid_order: -100 }] },
   { id: -1, name: "Assigned By", field_key: "assigned_by_name", grids: [{ grid_key: "my_leads", grid_width: 160, grid_order: 900 }] },
-  { id: -2, name: "Assigned To", field_key: "assigned_to", grids: [{ grid_key: "my_leads", grid_width: 160, grid_order: 910 }] },
+  { id: -3, name: "Call", field_key: "call_action", grids: [{ grid_key: "my_leads", grid_width: 80, grid_order: 920 }] },
 ];
 
 function getPropertyValue(record, property) {
   if (property.field_key === "company_name") return record.company_name || "";
   if (property.field_key === "assigned_by_name") return record.assigned_by_name || "";
-  if (property.field_key === "assigned_to") return record.assigned_user_name || "Not Assigned";
+  if (property.field_key === "call_action") return "";
   const pv = record.property_values?.find((v) => v.field_key === property.field_key);
   return pv ? pv.value : "";
 }
@@ -33,6 +36,12 @@ function splitMultiValue(value) {
 }
 
 function propertyOptions(property) {
+  if (property?.field_key === "company") {
+    return [
+      { value: "unassigned", label: "Unassigned Data" },
+      ...usersGlobal.map((u) => ({ label: u.name, value: String(u.id) }))
+    ];
+  }
   return (property?.options || [])
     .filter((option) => option.is_active !== false)
     .map((option) => ({ label: option.label, value: option.value }));
@@ -110,9 +119,11 @@ export function MyLeadsPage({ setPage, setEditingId }) {
 
   const [statusModal, setStatusModal] = useState(null);
   const [statusForm, setStatusForm] = useState({ remark: "", followUpDate: "", status: "", requirement: "" });
+  const [editingCell, setEditingCell] = useState(null); // { leadId, fieldKey, value }
+  const [draftClientReplays, setDraftClientReplays] = useState({}); // { leadId: value }
 
   const handleInlineEdit = async (companyId, prop, value) => {
-    if (prop.field_key === "status") {
+    if (prop.field_key === "status" && value === "converted") {
       setStatusModal({ companyId, property: prop, value });
       setStatusForm({ remark: "", followUpDate: "", status: value, requirement: "" });
       return;
@@ -158,6 +169,7 @@ export function MyLeadsPage({ setPage, setEditingId }) {
   const [leadForm, setLeadForm] = useState({ company_name: "", property_values: [] });
 
   const users = useLoad(() => api.users(), []);
+  usersGlobal = users.data || [];
   const leads = useLoad(() => api.myLeads(q), [q]);
   const properties = useLoad(() => api.properties(), []);
   const propertyGrids = useLoad(() => api.propertyGrids(), []);
@@ -269,9 +281,6 @@ export function MyLeadsPage({ setPage, setEditingId }) {
     const headers = gridProperties.map((p) => p.name);
     const rows = sortedLeads.map((lead) =>
       gridProperties.map((p) => {
-        if (p.field_key === "assigned_to") {
-          return lead.assigned_user_name || "Not Assigned";
-        }
         return getPropertyValue(lead, p) || "";
       })
     );
@@ -405,11 +414,6 @@ export function MyLeadsPage({ setPage, setEditingId }) {
           <button type="button" className="secondary icon-button" onClick={exportLeads}>
             <Download size={16} /> Export
           </button>
-          {hasAddPermission && (
-            <button className="icon-button" onClick={() => { setLeadForm({ company_name: "", property_values: [] }); setShowAddModal(true); }}>
-              <Plus size={16} /> Add Lead
-            </button>
-          )}
         </div>
 
         <div className="toolbar-menu-wrap">
@@ -498,7 +502,9 @@ export function MyLeadsPage({ setPage, setEditingId }) {
                       }
                       return (
                         <th key={`${p.field_key}-f`} style={{ width: `${getColumnWidth(p)}px`, minWidth: `${getColumnWidth(p)}px`, maxWidth: `${getColumnWidth(p)}px`, padding: "4px 8px" }}>
-                          {p.field_key === "assigned_to" || p.field_key === "assigned_by_name" || p.filter_type === "dropdown" || p.filter_type === "multiselect" ? (
+                          {p.field_key === "call_action" ? (
+                            <div style={{ minHeight: "28px" }} />
+                          ) : (p.field_key === "assigned_to" || p.field_key === "assigned_by_name" || p.filter_type === "dropdown" || p.filter_type === "multiselect") ? (
                             <GridFilterDropdown label={p.name} options={uniqueValues} value={columnFilters[p.field_key] || []} onChange={(val) => setColumnFilters({ ...columnFilters, [p.field_key]: val })} isMulti={true} />
                           ) : (
                             <input className="filter-input" placeholder={`Filter ${p.name}`} value={columnFilters[p.field_key] || ""} onChange={(e) => setColumnFilters({ ...columnFilters, [p.field_key]: e.target.value })} />
@@ -532,42 +538,221 @@ export function MyLeadsPage({ setPage, setEditingId }) {
                           />
                         </td>
                       )}
-                      {gridProperties.map((p) => (
-                        <td key={p.field_key} style={{ width: `${getColumnWidth(p)}px`, minWidth: `${getColumnWidth(p)}px`, maxWidth: `${getColumnWidth(p)}px` }}>
-                          {p.field_key === "assigned_to" ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <select
-                                className="compact-select"
-                                value={lead.assigned_to || ""}
-                                onChange={(e) => handleAssign(lead.id, e.target.value)}
-                                style={{ flex: 1, height: "28px", fontSize: "12px", padding: "0 8px", borderRadius: "6px", border: "1px solid #d9e2ee", background: lead.assigned_to ? "#f0fdf4" : "#fff" }}
-                              >
-                                <option value="">Not Assigned</option>
-                                {users.data?.map(u => (
-                                  <option key={u.id} value={u.id}>{u.name}</option>
-                                ))}
-                              </select>
-                              {lead.history_keys?.includes("assigned_to") && (
-                                <button className="cell-icon-button" onClick={() => openHistory(lead.id, "assigned_to")} title="View Assignment History">
-                                  <History size={14} />
+                      {gridProperties.map((p) => {
+                        const isEditing = editingCell?.leadId === lead.id && editingCell?.fieldKey === p.field_key;
+                        return (
+                          <td 
+                            key={p.field_key} 
+                            style={{ 
+                              width: `${getColumnWidth(p)}px`, 
+                              minWidth: `${getColumnWidth(p)}px`, 
+                              maxWidth: `${getColumnWidth(p)}px`,
+                              overflow: isEditing ? 'visible' : 'hidden', 
+                              position: 'relative', 
+                              zIndex: isEditing ? 100 : 10 
+                            }}
+                            onDoubleClick={() => {
+                              if (p.field_key !== "call_action" && p.field_key !== "assigned_by_name" && p.field_key !== "status" && p.field_key !== "client_replay" && p.field_key !== "connected_source" && !isMultiSelectProperty(p) && p.object_type !== "dropdown" && (canManage || canEditLeads)) {
+                                setEditingCell({ leadId: lead.id, fieldKey: p.field_key, value: getPropertyValue(lead, p) });
+                              }
+                            }}
+                          >
+                            {isEditing ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '2px' }}>
+                                {p.object_type === "textarea" ? (
+                                  <textarea
+                                    style={{
+                                      width: "100%",
+                                      padding: "4px",
+                                      border: "1px solid #e2e8f0",
+                                      borderRadius: "4px",
+                                      fontSize: "12px"
+                                    }}
+                                    rows={2}
+                                    value={editingCell.value || ""}
+                                    onChange={(e) => setEditingCell(prev => ({ ...prev, value: e.target.value }))}
+                                  />
+                                ) : (
+                                  <input
+                                    style={{
+                                      width: "100%",
+                                      padding: "4px",
+                                      border: "1px solid #e2e8f0",
+                                      borderRadius: "4px",
+                                      fontSize: "12px"
+                                    }}
+                                    type={p.object_type === "number" ? "number" : p.object_type === "date" ? "date" : "text"}
+                                    value={editingCell.value || ""}
+                                    onChange={(e) => setEditingCell(prev => ({ ...prev, value: e.target.value }))}
+                                  />
+                                )}
+                                <div style={{ display: 'flex', gap: '4px' }}>
+                                  <button
+                                    type="button"
+                                    onClick={async () => {
+                                      await handleInlineEdit(lead.id, p, editingCell.value);
+                                      setEditingCell(null);
+                                    }}
+                                    style={{
+                                      padding: "2px 8px",
+                                      backgroundColor: "#176b5b",
+                                      color: "#fff",
+                                      border: "none",
+                                      borderRadius: "4px",
+                                      fontSize: "11px",
+                                      fontWeight: "600",
+                                      cursor: "pointer"
+                                    }}
+                                  >
+                                    Save
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingCell(null)}
+                                    style={{
+                                      padding: "2px 8px",
+                                      backgroundColor: "#ef4444",
+                                      color: "#fff",
+                                      border: "none",
+                                      borderRadius: "4px",
+                                      fontSize: "11px",
+                                      fontWeight: "600",
+                                      cursor: "pointer"
+                                    }}
+                                  >
+                                    Cancel
+                                  </button>
+                                </div>
+                              </div>
+                            ) : p.field_key === "call_action" ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
+                                <button
+                                  className="cell-icon-button call-action-btn"
+                                  style={{
+                                    backgroundColor: "#d1fae5",
+                                    color: "#065f46",
+                                    border: "1px solid #a7f3d0",
+                                    borderRadius: "6px",
+                                    padding: "6px",
+                                    display: "flex",
+                                    alignItems: "center",
+                                    justifyContent: "center",
+                                    cursor: "pointer"
+                                  }}
+                                  onClick={() => {
+                                    const statusProp = activeProperties.find(prop => prop.field_key === "status");
+                                    if (statusProp) {
+                                      openStatusUpdate(lead, statusProp);
+                                    } else {
+                                      notify("Status property configuration not found", "error");
+                                    }
+                                  }}
+                                  title="Call Lead / Update Status"
+                                >
+                                  <Phone size={14} />
                                 </button>
-                              )}
-                            </div>
-                          ) : p.field_key === "status" ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <span className="cell-text" title={formatPropertyValue(p, getPropertyValue(lead, p))} style={{ flex: 1, fontWeight: "600", fontSize: "12px", color: lead.is_inquiry ? "#176b5b" : "inherit" }}>
-                                {formatPropertyValue(p, getPropertyValue(lead, p)) || "-"}
-                                {lead.is_inquiry && <span style={{ marginLeft: "4px", fontSize: "10px", padding: "1px 4px", borderRadius: "4px", background: "#e8f2f0", color: "#176b5b", fontWeight: "700" }}>INQ</span>}
-                              </span>
-                              <button className="cell-icon-button" onClick={() => openStatusUpdate(lead, p)} title="Update Status">
-                                <Pencil size={14} />
-                              </button>
-                              {lead.history_keys?.includes("status") && (
-                                <button className="cell-icon-button" onClick={() => openHistory(lead.id, ["status", "connected_source"])} title="View Status History">
-                                  <History size={14} />
-                                </button>
-                              )}
-                            </div>
+                                {(lead.history_keys?.includes("connected_source") || lead.history_keys?.includes("status")) && (
+                                  <button className="cell-icon-button" onClick={() => openHistory(lead.id, ["status", "connected_source"])} title="View Call History">
+                                    <History size={14} />
+                                  </button>
+                                )}
+                              </div>
+                            ) : p.field_key === "client_replay" ? (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '2px', width: "100%" }}>
+                                <input
+                                  style={{
+                                    width: "100%",
+                                    padding: "4px 8px",
+                                    border: "1px solid #cbd5e1",
+                                    borderRadius: "4px",
+                                    fontSize: "12px",
+                                    boxSizing: "border-box"
+                                  }}
+                                  type="text"
+                                  value={draftClientReplays[lead.id] !== undefined ? draftClientReplays[lead.id] : (getPropertyValue(lead, p) || "")}
+                                  disabled={!(canManage || canEditLeads)}
+                                  onChange={(e) => setDraftClientReplays(prev => ({ ...prev, [lead.id]: e.target.value }))}
+                                  placeholder="Enter reply..."
+                                />
+                                {draftClientReplays[lead.id] !== undefined && draftClientReplays[lead.id] !== (getPropertyValue(lead, p) || "") && (
+                                  <div style={{ display: 'flex', gap: '4px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        const val = draftClientReplays[lead.id];
+                                        await handleInlineEdit(lead.id, p, val);
+                                        setDraftClientReplays(prev => {
+                                          const next = { ...prev };
+                                          delete next[lead.id];
+                                          return next;
+                                        });
+                                      }}
+                                      style={{
+                                        padding: "2px 8px",
+                                        backgroundColor: "#176b5b",
+                                        color: "#fff",
+                                        border: "none",
+                                        borderRadius: "4px",
+                                        fontSize: "11px",
+                                        fontWeight: "600",
+                                        cursor: "pointer"
+                                      }}
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => {
+                                        setDraftClientReplays(prev => {
+                                          const next = { ...prev };
+                                          delete next[lead.id];
+                                          return next;
+                                        });
+                                      }}
+                                      style={{
+                                        padding: "2px 8px",
+                                        backgroundColor: "#ef4444",
+                                        color: "#fff",
+                                        border: "none",
+                                        borderRadius: "4px",
+                                        fontSize: "11px",
+                                        fontWeight: "600",
+                                        cursor: "pointer"
+                                      }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            ) : p.field_key === "status" ? (
+                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', width: "100%" }}>
+                                <select
+                                  className="inline-select"
+                                  style={{
+                                    flex: 1,
+                                    padding: "4px",
+                                    border: "1px solid #e2e8f0",
+                                    borderRadius: "4px",
+                                    fontSize: "12px",
+                                    fontWeight: "600",
+                                    color: lead.is_inquiry ? "#176b5b" : "inherit"
+                                  }}
+                                  value={getPropertyValue(lead, p) || ""}
+                                  disabled={!(canManage || canEditLeads)}
+                                  onChange={(e) => handleInlineEdit(lead.id, p, e.target.value)}
+                                >
+                                  <option value="">-</option>
+                                  {p.options?.filter(o => o.is_active !== false && COLD_LEAD_STATUSES.includes(o.value)).map(o => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
+                                  ))}
+                                </select>
+                                {(lead.history_keys?.includes("status") || lead.history_keys?.includes("connected_source")) && (
+                                  <button className="cell-icon-button" onClick={() => openHistory(lead.id, ["status", "connected_source"])} title="View Status History">
+                                    <History size={14} />
+                                  </button>
+                                )}
+                              </div>
                           ) : p.field_key === "connected_source" ? (
                             <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                               <span className="cell-text" title={getPropertyValue(lead, p)} style={{ flex: 1, fontWeight: "600", fontSize: "12px" }}>
@@ -580,9 +765,11 @@ export function MyLeadsPage({ setPage, setEditingId }) {
                                 contactNumber={getPropertyValue(lead, { field_key: "contact_number" })}
                                 emailId={getPropertyValue(lead, { field_key: "email_id" })}
                                 onUpdated={leads.reload}
+                                statusProperty={activeProperties.find(prop => prop.field_key === "status")}
+                                currentStatus={getPropertyValue(lead, { field_key: "status" })}
                               />
-                              {lead.history_keys?.includes(p.field_key) && (
-                                <button className="cell-icon-button" onClick={() => openHistory(lead.id, p.field_key)} title="View Connected Source History">
+                              {(lead.history_keys?.includes("connected_source") || lead.history_keys?.includes("status")) && (
+                                <button className="cell-icon-button" onClick={() => openHistory(lead.id, ["status", "connected_source"])} title="View Connected Source History">
                                   <History size={14} />
                                 </button>
                               )}
@@ -629,7 +816,8 @@ export function MyLeadsPage({ setPage, setEditingId }) {
                             </span>
                           )}
                         </td>
-                      ))}
+                      );
+                      })}
                       {canManage && (
                         <td>
                           <div className="row-actions">
@@ -855,7 +1043,7 @@ export function MyLeadsPage({ setPage, setEditingId }) {
                     <div key={h.id} style={{ padding: "10px", border: "1px solid #e2e8f0", borderRadius: "6px", background: "#f8fafc" }}>
                       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "6px", fontSize: "11px", color: "#64748b", fontWeight: "600" }}>
                         <span>{new Date(h.created_at).toLocaleString()}</span>
-                        <span>{h.user_name || "System"}</span>
+                        <span>{h.user_name || "System"}{h.our_company_names ? ` (${h.our_company_names})` : ""}</span>
                       </div>
                       <div style={{ fontSize: "13px", color: "#334155" }}>
                         {h.property_key === "connected_source" ? (
@@ -884,8 +1072,26 @@ export function MyLeadsPage({ setPage, setEditingId }) {
         .my-leads-page .table-wrap { overflow: auto; border: 1px solid #e2e8f0; border-radius: 6px; background: #fff; }
         .company-table { width: max-content; min-width: 100%; table-layout: fixed; border-collapse: separate; border-spacing: 0; }
         .company-table th, .company-table td { padding: 10px 12px; font-size: 13px; border-bottom: 1px solid #e2e8f0; border-right: 1px solid #e2e8f0; text-align: left; overflow: hidden; box-sizing: border-box; }
-        .company-table thead th { background: #f8fafc; font-weight: 700; position: sticky; top: 0; z-index: 20; color: #475569; }
-        .company-table .filter-row th { background: #f8fafc; position: sticky; top: 41px; z-index: 15; padding: 6px 12px; }
+        .company-table thead tr:first-child th {
+          position: sticky;
+          top: 0;
+          z-index: 1000;
+          height: 38px;
+          padding: 8px 12px;
+          background: #f8fafc;
+          font-weight: 700;
+          color: #475569;
+          box-sizing: border-box;
+        }
+        .company-table .filter-row th {
+          position: sticky;
+          top: 38px;
+          z-index: 999;
+          height: 44px;
+          background: #f8fafc;
+          padding: 6px 12px;
+          box-sizing: border-box;
+        }
         .company-table .filter-row input { width: 100%; padding: 6px 10px; border: 1px solid #cbd5e1; border-radius: 4px; font-size: 12px; }
         .my-leads-page .inline-multi-select .premium-filter-trigger {
           height: 30px;

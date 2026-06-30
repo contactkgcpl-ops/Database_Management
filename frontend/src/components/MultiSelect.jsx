@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Check, Search, X, ChevronsUpDown } from "lucide-react";
 
-export function MultiSelect({ label, options = [], value = [], onChange, placeholder = "Select", searchPlaceholder = "Search" }) {
+export function MultiSelect({ label, options = [], value = [], onChange, placeholder = "Select", searchPlaceholder = "Search", disabled = false, onOpenChange }) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const wrapRef = useRef(null);
@@ -11,11 +11,14 @@ export function MultiSelect({ label, options = [], value = [], onChange, placeho
 
   useEffect(() => {
     const close = (event) => {
-      if (!wrapRef.current?.contains(event.target)) setOpen(false);
+      if (!wrapRef.current?.contains(event.target)) {
+        setOpen(false);
+        if (onOpenChange) onOpenChange(false);
+      }
     };
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
-  }, []);
+  }, [onOpenChange]);
 
   const toggleOption = (optionValue) => {
     const key = String(optionValue);
@@ -33,8 +36,15 @@ export function MultiSelect({ label, options = [], value = [], onChange, placeho
       <div
         className={`premium-select-control ${open ? "open" : ""}`}
         role="button"
-        tabIndex={0}
-        onClick={() => setOpen((current) => !current)}
+        tabIndex={disabled ? -1 : 0}
+        onClick={() => {
+          if (!disabled) {
+            const nextOpen = !open;
+            setOpen(nextOpen);
+            if (onOpenChange) onOpenChange(nextOpen);
+          }
+        }}
+        style={disabled ? { opacity: 0.6, cursor: "not-allowed", backgroundColor: "#f8fafc" } : {}}
       >
         <div className="premium-select-content">
           {selectedOptions.length ? (
@@ -42,7 +52,7 @@ export function MultiSelect({ label, options = [], value = [], onChange, placeho
               {selectedOptions.map((option) => (
                 <span className="premium-chip" key={option.value}>
                   {option.label}
-                  <button type="button" onClick={(e) => { e.stopPropagation(); removeOption(option.value); }}>
+                  <button type="button" onClick={(e) => { e.stopPropagation(); if (!disabled) removeOption(option.value); }}>
                     <X size={12} />
                   </button>
                 </span>

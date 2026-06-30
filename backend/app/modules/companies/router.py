@@ -99,17 +99,17 @@ def list_my_leads(
         
         allowed_user_ids = [user.id] + sub_ids
 
-        query = db.query(Company).join(LeadManage, Company.id == LeadManage.company_id).filter(
-            LeadManage.is_inquiry != True
+        query = db.query(Company).outerjoin(LeadManage, Company.id == LeadManage.company_id).filter(
+            or_(LeadManage.is_inquiry != True, LeadManage.is_inquiry.is_(None))
         )
         
-        or_conds = [LeadManage.assigned_to_id.in_(allowed_user_ids)]
+        or_conds = []
         for uid in allowed_user_ids:
             uid_str = str(uid)
-            or_conds.append(LeadManage.assigned_to_ids == uid_str)
-            or_conds.append(LeadManage.assigned_to_ids.like(f"{uid_str},%"))
-            or_conds.append(LeadManage.assigned_to_ids.like(f"%,{uid_str}"))
-            or_conds.append(LeadManage.assigned_to_ids.like(f"%,{uid_str},%"))
+            or_conds.append(text(f"companies.company = '{uid_str}'"))
+            or_conds.append(text(f"companies.company LIKE '{uid_str},%'"))
+            or_conds.append(text(f"companies.company LIKE '%,{uid_str}'"))
+            or_conds.append(text(f"companies.company LIKE '%,{uid_str},%'"))
         query = query.filter(or_(*or_conds))
         if q:
             term = f"%{q.strip()}%"
@@ -277,6 +277,14 @@ def get_company_history_endpoint(
             if h.new_value and h.new_value.strip().isdigit():
                 new_val = get_user_names_by_ids(db, h.new_value)
 
+        our_company_names = ""
+        if h.our_company_ids:
+            from app.models import OurCompany
+            ids = [int(x.strip()) for x in h.our_company_ids.split(",") if x.strip().isdigit()]
+            if ids:
+                companies = db.query(OurCompany).filter(OurCompany.id.in_(ids)).all()
+                our_company_names = ", ".join([c.name for c in companies])
+
         ret.append({
             "id": h.id,
             "company_id": h.company_id,
@@ -288,7 +296,9 @@ def get_company_history_endpoint(
             "user_id": h.user_id,
             "created_at": h.created_at,
             "updated_at": h.updated_at,
-            "user_name": h.user.name if h.user else None
+            "user_name": h.user.name if h.user else None,
+            "our_company_ids": h.our_company_ids,
+            "our_company_names": our_company_names
         })
     return ret
 

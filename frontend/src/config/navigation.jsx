@@ -20,7 +20,6 @@ export const navigation = [
     children: [
       { key: "show-companies", label: "Show Companies", icon: Building2, page: "companies", permission: "companies.view" },
       { key: "add-companies", label: "Add Companies", icon: Building2, page: "add-company", permission: "companies.manage" },
-      { key: "assign-leads", label: "Assign Company", icon: Users, page: "assign-leads", permission: "leads.assign" },
     ],
   },
   {

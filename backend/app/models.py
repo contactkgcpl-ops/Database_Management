@@ -179,9 +179,27 @@ class LeadHistory(Base, TimestampMixin):
     new_value: Mapped[str | None] = mapped_column(Text)
     remark: Mapped[str | None] = mapped_column(Text)
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    our_company_ids: Mapped[str | None] = mapped_column(Text, nullable=True)
     
     company: Mapped[Company] = relationship()
     user: Mapped[User | None] = relationship(foreign_keys=[user_id])
+
+
+from sqlalchemy import event
+
+@event.listens_for(LeadHistory, "before_insert")
+def populate_lead_history_our_companies(mapper, connection, target):
+    if target.user_id and not target.our_company_ids:
+        from sqlalchemy import text
+        try:
+            res = connection.execute(
+                text("SELECT company_ids FROM users WHERE id = :uid"),
+                {"uid": target.user_id}
+            ).first()
+            if res:
+                target.our_company_ids = res[0]
+        except Exception:
+            pass
 
 
 class LeadFollowUp(Base, TimestampMixin):

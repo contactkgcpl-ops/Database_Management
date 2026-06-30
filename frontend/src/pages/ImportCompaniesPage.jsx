@@ -107,7 +107,30 @@ const buildCompanyPayload = (row, mapping, activeProperties) => {
         } else {
             const prop = activeProperties.find(p => p.field_key === fieldKey);
             if (prop) {
-                payload.property_values.push({ property_id: prop.id, value: val });
+                let mappedVal = val;
+                if (prop.options && prop.options.length > 0) {
+                    const isMulti = prop.is_multi_value || prop.object_type === "multiselect";
+                    if (isMulti) {
+                        const parts = val.split(",").map(v => v.trim()).filter(Boolean);
+                        const mappedParts = parts.map(part => {
+                            const matchedOpt = prop.options.find(o => 
+                                String(o.value).toLowerCase() === part.toLowerCase() || 
+                                String(o.label).toLowerCase() === part.toLowerCase()
+                            );
+                            return matchedOpt ? matchedOpt.value : part;
+                        });
+                        mappedVal = mappedParts.join(",");
+                    } else {
+                        const matchedOpt = prop.options.find(o => 
+                            String(o.value).toLowerCase() === val.toLowerCase() || 
+                            String(o.label).toLowerCase() === val.toLowerCase()
+                        );
+                        if (matchedOpt) {
+                            mappedVal = matchedOpt.value;
+                        }
+                    }
+                }
+                payload.property_values.push({ property_id: prop.id, value: mappedVal });
             }
         }
     });
@@ -135,6 +158,45 @@ export function ImportCompaniesPage({ onBack }) {
     const [rowErrors, setRowErrors] = useState({}); // map of { row_id: error_message }
     const [invalidRowIds, setInvalidRowIds] = useState([]);
     const geoData = useLoad(() => api.statesAndCities(), []);
+
+    const normalizeCsvData = () => {
+        setCsvData(prev => {
+            const updatedRows = prev.rows.map(row => {
+                const updatedRow = { ...row };
+                Object.entries(mapping).forEach(([headerId, fieldKey]) => {
+                    if (!fieldKey || fieldKey === "company_name" || fieldKey === "id") return;
+                    const val = String(row[headerId] || "").trim();
+                    if (!val) return;
+
+                    const prop = activeProperties.find(p => p.field_key === fieldKey);
+                    if (prop && prop.options && prop.options.length > 0) {
+                        const isMulti = prop.is_multi_value || prop.object_type === "multiselect";
+                        if (isMulti) {
+                            const parts = val.split(",").map(v => v.trim()).filter(Boolean);
+                            const normalizedParts = parts.map(part => {
+                                const matchedOpt = prop.options.find(o => 
+                                    String(o.value).toLowerCase() === part.toLowerCase() || 
+                                    String(o.label).toLowerCase() === part.toLowerCase()
+                                );
+                                return matchedOpt ? matchedOpt.value : part;
+                            });
+                            updatedRow[headerId] = normalizedParts.join(",");
+                        } else {
+                            const matchedOpt = prop.options.find(o => 
+                                String(o.value).toLowerCase() === val.toLowerCase() || 
+                                String(o.label).toLowerCase() === val.toLowerCase()
+                            );
+                            if (matchedOpt) {
+                                updatedRow[headerId] = matchedOpt.value;
+                            }
+                        }
+                    }
+                });
+                return updatedRow;
+            });
+            return { ...prev, rows: updatedRows };
+        });
+    };
 
     const renderCellEditor = (idx, header, val, row, fieldKey) => {
         const isEditing = editingCell?.rowIndex === idx && editingCell?.headerId === header.id;
@@ -697,7 +759,10 @@ export function ImportCompaniesPage({ onBack }) {
                         <div className="modal-actions">
                             <button
                                 className="icon-button"
-                                onClick={() => setStep(2)}
+                                onClick={() => {
+                                    normalizeCsvData();
+                                    setStep(2);
+                                }}
                                 disabled={!isCompanyNameMapped || !isCityMapped || !isStateMapped || !isIndustriesMapped || !isTypeMapped}
                                 style={(!isCompanyNameMapped || !isCityMapped || !isStateMapped || !isIndustriesMapped || !isTypeMapped) ? {
                                     opacity: 0.5,

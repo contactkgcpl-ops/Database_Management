@@ -7,6 +7,7 @@ import { useAuth } from "../context/AuthContext";
 import { useLoad } from "../hooks/useLoad";
 import { Pagination } from "../components/Pagination";
 import { orderedVisibleColumns, readColumnKeys, writeColumnKeys } from "../utils/columnConfig";
+import { MultiSelect } from "../components/MultiSelect";
 
 const emptyForm = {
   company_name: "",
@@ -25,15 +26,21 @@ function getCompanyPropertyValue(company, property) {
   if (property.field_key === "company_name") return company.company_name || "";
   if (property.field_key === "created_by_name") return company.created_by_name || "";
   const pv = company.property_values?.find((v) => v.field_key === property.field_key);
-  return pv ? pv.value : "";
+  const val = pv ? pv.value : "";
+  if (property.field_key === "verification_status" && (!val || !val.trim())) {
+    return "pending";
+  }
+  if (property.field_key === "company" && (!val || !val.trim())) {
+    return "unassigned";
+  }
+  return val;
 }
 
 function propertyOptions(property) {
   if (property?.field_key === "company") {
-    const filteredUsers = usersGlobal.filter(u => u.company_ids && u.company_ids.trim());
     return [
       { value: "unassigned", label: "Unassigned Data" },
-      ...filteredUsers.map((u) => ({ label: u.name, value: String(u.id) }))
+      ...usersGlobal.map((u) => ({ label: u.name, value: String(u.id) }))
     ];
   }
   return (property?.options || [])
@@ -121,7 +128,9 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
   const [actionsMenuOpen, setActionsMenuOpen] = useState(false);
   const [bulkMode, setBulkMode] = useState(false);
   const [selectedCompanyIds, setSelectedCompanyIds] = useState([]);
+  const [editingCell, setEditingCell] = useState(null); // { companyId, fieldKey, value }
   const [bulkAssignUser, setBulkAssignUser] = useState("");
+  const [openDropdownCompanyId, setOpenDropdownCompanyId] = useState(null);
 
   const toggleCompanySelection = (id) => {
     const cid = Number(id);
@@ -634,7 +643,7 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
                     >
                       <option value="">-- Bulk Assign Data --</option>
                       <option value="unassigned">Unassigned Data</option>
-                      {users.data?.filter(u => u.company_ids && u.company_ids.trim()).map(u => (
+                      {users.data?.map(u => (
                         <option key={u.id} value={String(u.id)}>{u.name}</option>
                       ))}
                     </select>
@@ -706,77 +715,241 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
                             />
                           </td>
                         )}
-                        {gridProperties.map((p) => (
-                          <td key={p.field_key}>
-                            {p.object_type === "dropdown" ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <select
-                                  className="inline-select"
-                                  style={{
-                                    flex: 1,
-                                    padding: "4px",
-                                    border: "1px solid #e2e8f0",
-                                    borderRadius: "4px",
-                                    fontSize: "12px",
-                                    ...getVerificationStatusStyle(getCompanyPropertyValue(c, p))
-                                  }}
-                                  value={getCompanyPropertyValue(c, p) || ""}
-                                  onChange={(e) => handleInlineEdit(c.id, p, e.target.value)}
+                        {gridProperties.map((p) => {
+                          const isEditing = editingCell?.companyId === c.id && editingCell?.fieldKey === p.field_key;
+                          const currentVal = getCompanyPropertyValue(c, p);
+
+                          return (
+                            <td 
+                              key={p.field_key} 
+                              style={(isEditing || p.field_key === "company") ? { overflow: 'visible', position: 'relative', zIndex: (isEditing || openDropdownCompanyId === c.id) ? 100 : 10 } : {}}
+                            >
+                              {p.field_key === "company" ? (
+                                <MultiSelect
+                                  options={
+                                    [{ value: "unassigned", label: "Unassigned Data" }, ...(users.data || []).map(u => ({ value: String(u.id), label: u.name }))]
+                                  }
+                                  value={currentVal ? currentVal.split(",") : []}
                                   disabled={!canManage}
-                                >
-                                  <option value="">-</option>
-                                  {p.options?.map(o => (
-                                    <option key={o.value} value={o.value}>{o.label}</option>
-                                  ))}
-                                </select>
-                                {c.history_keys?.includes(p.field_key) && (
-                                  <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, p.field_key)} title={`View ${p.name} History`} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
-                                    <History size={14} style={{ color: "#64748b" }} />
-                                  </button>
-                                )}
-                              </div>
-                            ) : (p.object_type === "multiselect" && p.field_key !== "type" && (p.field_key !== "company" || canManage)) ? (
-                              <div className="inline-multi-select" style={{ display: "flex", alignItems: "center", gap: "4px" }}>
-                                <GridFilterDropdown
-                                  label={formatPropertyValue(p, getCompanyPropertyValue(c, p)) || "-"}
-                                  options={propertyOptions(p)}
-                                  value={splitMultiValue(getCompanyPropertyValue(c, p))}
-                                  onChange={(next) => {
-                                    let filtered = next;
-                                    if (p.field_key === "company") {
-                                      const hasUnassigned = next.includes("unassigned");
-                                      const hadUnassigned = splitMultiValue(getCompanyPropertyValue(c, p)).includes("unassigned");
-                                      if (hasUnassigned && !hadUnassigned) {
-                                        filtered = ["unassigned"];
-                                      } else if (hasUnassigned && next.length > 1) {
-                                        filtered = next.filter(v => v !== "unassigned");
-                                      }
+                                  onOpenChange={(isOpen) => {
+                                    if (isOpen) {
+                                      setOpenDropdownCompanyId(c.id);
+                                    } else {
+                                      setOpenDropdownCompanyId(null);
                                     }
-                                    handleInlineEdit(c.id, p, filtered.join(","));
                                   }}
-                                  isMulti={true}
-                                  showSaveButton={true}
+                                  onChange={async (next) => {
+                                    let filtered = next;
+                                    const hasUnassigned = next.includes("unassigned");
+                                    const hadUnassigned = (currentVal ? currentVal.split(",") : []).includes("unassigned");
+                                    if (hasUnassigned && !hadUnassigned) {
+                                      filtered = ["unassigned"];
+                                    } else if (hasUnassigned && next.length > 1) {
+                                      filtered = next.filter(v => v !== "unassigned");
+                                    }
+                                    await handleInlineEdit(c.id, p, filtered.join(","));
+                                  }}
+                                  placeholder="Select Assignee"
                                 />
-                                {c.history_keys?.includes(p.field_key) && (
-                                  <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, p.field_key)} title={`View ${p.name} History`} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
-                                    <History size={14} style={{ color: "#64748b" }} />
-                                  </button>
-                                )}
-                              </div>
-                            ) : (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <span className="cell-text" title={getCompanyPropertyValue(c, p)}>
-                                  {p.field_key === "company_name" ? <strong>{getCompanyPropertyValue(c, p)}</strong> : (p.field_key === "company" || p.options?.length ? formatPropertyValue(p, getCompanyPropertyValue(c, p)) : getCompanyPropertyValue(c, p))}
-                                </span>
-                                {p.field_key === "company" && c.history_keys?.includes(p.field_key) && (
-                                  <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, p.field_key)} title={`View ${p.name} History`} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
-                                    <History size={14} style={{ color: "#64748b" }} />
-                                  </button>
-                                )}
-                              </div>
-                            )}
-                          </td>
-                        ))}
+                              ) : isEditing ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '2px' }}>
+                                  {p.field_key === "state" ? (
+                                    <select
+                                      className="inline-select"
+                                      style={{
+                                        width: "100%",
+                                        padding: "4px",
+                                        border: "1px solid #e2e8f0",
+                                        borderRadius: "4px",
+                                        fontSize: "12px"
+                                      }}
+                                      value={editingCell.value || ""}
+                                      disabled={!canManage}
+                                      onChange={(e) => {
+                                        setEditingCell(prev => ({ ...prev, value: e.target.value }));
+                                      }}
+                                    >
+                                      {Object.keys(geoData.data?.states || {}).length === 0 ? (
+                                        <option value="">Loading States...</option>
+                                      ) : (
+                                        <>
+                                          <option value="">Select State</option>
+                                          {(geoData.data?.states || []).map(s => (
+                                            <option key={s.state} value={s.state}>{s.state}</option>
+                                          ))}
+                                        </>
+                                      )}
+                                    </select>
+                                  ) : p.field_key === "city" ? (
+                                    <select
+                                      className="inline-select"
+                                      style={{
+                                        width: "100%",
+                                        padding: "4px",
+                                        border: "1px solid #e2e8f0",
+                                        borderRadius: "4px",
+                                        fontSize: "12px"
+                                      }}
+                                      value={editingCell.value || ""}
+                                      disabled={!getCompanyPropertyValue(c, { field_key: "state" }) || !canManage}
+                                      onChange={(e) => setEditingCell(prev => ({ ...prev, value: e.target.value }))}
+                                    >
+                                      {(() => {
+                                        const companyState = getCompanyPropertyValue(c, { field_key: "state" });
+                                        const matchedState = (geoData.data?.states || []).find(s => s.state === companyState);
+                                        const citiesList = matchedState ? (matchedState.districts || []) : [];
+                                        return (
+                                          <>
+                                            <option value="">{!companyState ? "Select State First" : "Select City"}</option>
+                                            {citiesList.map(city => (
+                                              <option key={city} value={city}>{city}</option>
+                                            ))}
+                                          </>
+                                        );
+                                      })()}
+                                    </select>
+                                  ) : p.object_type === "dropdown" ? (
+                                    <select
+                                      className="inline-select"
+                                      style={{
+                                        width: "100%",
+                                        padding: "4px",
+                                        border: "1px solid #e2e8f0",
+                                        borderRadius: "4px",
+                                        fontSize: "12px",
+                                        ...getVerificationStatusStyle(editingCell.value)
+                                      }}
+                                      value={editingCell.value || ""}
+                                      disabled={!canManage}
+                                      onChange={(e) => setEditingCell(prev => ({ ...prev, value: e.target.value }))}
+                                    >
+                                      <option value="">-</option>
+                                      {p.options?.map(o => (
+                                        <option key={o.value} value={o.value}>{o.label}</option>
+                                      ))}
+                                    </select>
+                                  ) : p.object_type === "multiselect" ? (
+                                    <MultiSelect
+                                      options={
+                                        p.options?.filter(o => o.is_active !== false).map(o => ({ value: o.value, label: o.label })) || []
+                                      }
+                                      value={editingCell.value ? editingCell.value.split(",") : []}
+                                      onChange={(next) => {
+                                        setEditingCell(prev => ({ ...prev, value: next.join(",") }));
+                                      }}
+                                      placeholder={`Select ${p.name}`}
+                                    />
+                                  ) : p.object_type === "textarea" ? (
+                                    <textarea
+                                      style={{
+                                        width: "100%",
+                                        padding: "4px",
+                                        border: "1px solid #e2e8f0",
+                                        borderRadius: "4px",
+                                        fontSize: "12px"
+                                      }}
+                                      rows={2}
+                                      value={editingCell.value || ""}
+                                      disabled={!canManage}
+                                      onChange={(e) => setEditingCell(prev => ({ ...prev, value: e.target.value }))}
+                                    />
+                                  ) : (
+                                    <input
+                                      style={{
+                                        width: "100%",
+                                        padding: "4px",
+                                        border: "1px solid #e2e8f0",
+                                        borderRadius: "4px",
+                                        fontSize: "12px"
+                                      }}
+                                      type={p.object_type === "number" ? "number" : p.object_type === "date" ? "date" : "text"}
+                                      value={editingCell.value || ""}
+                                      disabled={!canManage}
+                                      onChange={(e) => setEditingCell(prev => ({ ...prev, value: e.target.value }))}
+                                    />
+                                  )}
+                                  <div style={{ display: 'flex', gap: '4px' }}>
+                                    <button
+                                      type="button"
+                                      onClick={async () => {
+                                        await handleInlineEdit(c.id, p, editingCell.value);
+                                        setEditingCell(null);
+                                      }}
+                                      style={{
+                                        padding: "2px 8px",
+                                        backgroundColor: "#176b5b",
+                                        color: "#fff",
+                                        border: "none",
+                                        borderRadius: "4px",
+                                        fontSize: "11px",
+                                        fontWeight: "600",
+                                        cursor: "pointer"
+                                      }}
+                                    >
+                                      Save
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setEditingCell(null)}
+                                      style={{
+                                        padding: "2px 8px",
+                                        backgroundColor: "#ef4444",
+                                        color: "#fff",
+                                        border: "none",
+                                        borderRadius: "4px",
+                                        fontSize: "11px",
+                                        fontWeight: "600",
+                                        cursor: "pointer"
+                                      }}
+                                    >
+                                      Cancel
+                                    </button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div
+                                  onDoubleClick={() => {
+                                    if (p.field_key !== "created_by_name") {
+                                      setEditingCell({ companyId: c.id, fieldKey: p.field_key, value: currentVal });
+                                    }
+                                  }}
+                                  style={{
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    width: '100%',
+                                    minHeight: '28px',
+                                    cursor: (p.field_key !== "created_by_name") ? 'pointer' : 'default',
+                                    padding: '2px 4px',
+                                    borderRadius: '4px'
+                                  }}
+                                  title={(p.field_key !== "created_by_name") ? "Double click to edit" : undefined}
+                                >
+                                  <span className="cell-text" style={{ flex: 1 }} title={currentVal}>
+                                    {p.field_key === "company_name" ? (
+                                      <strong>{currentVal}</strong>
+                                    ) : (p.field_key === "company" || p.options?.length) ? (
+                                      formatPropertyValue(p, currentVal) || "-"
+                                    ) : (
+                                      currentVal || "-"
+                                    )}
+                                  </span>
+                                  {c.history_keys?.includes(p.field_key) && (
+                                    <button
+                                      type="button"
+                                      className="cell-icon-button"
+                                      onClick={() => openHistory(c.id, p.field_key)}
+                                      title={`View ${p.name} History`}
+                                      style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}
+                                    >
+                                      <History size={14} style={{ color: "#64748b" }} />
+                                    </button>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                          );
+                        })}
                         {canManage && (
                           <td>
                             <div className="row-actions">

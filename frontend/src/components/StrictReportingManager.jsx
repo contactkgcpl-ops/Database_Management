@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Clock, AlertTriangle, CheckCircle, Plus, Trash, LogOut, Lock, ArrowRight } from "lucide-react";
 import { api } from "../api";
 import { useNotify } from "./NotificationProvider";
@@ -24,15 +24,29 @@ export function StrictReportingManager({ user, onLogout }) {
   const [todayPlanTasks, setTodayPlanTasks] = useState([]);
   const [selectedTaskId, setSelectedTaskId] = useState("");
   const [customTaskTitle, setCustomTaskTitle] = useState("");
+  const [customTaskDesc, setCustomTaskDesc] = useState("");
+  const [customTaskCount, setCustomTaskCount] = useState("");
+  const [customTaskEta, setCustomTaskEta] = useState("1 Hour");
   const [isCustomTask, setIsCustomTask] = useState(false);
   const [progressDesc, setProgressDesc] = useState("");
+  
+  // Next Task States
+  const [isNextTaskCustom, setIsNextTaskCustom] = useState(false);
+  const [selectedNextTaskId, setSelectedNextTaskId] = useState("");
+  const [nextTaskTitle, setNextTaskTitle] = useState("");
   const [nextTaskDesc, setNextTaskDesc] = useState("");
+  const [nextTaskCount, setNextTaskCount] = useState("");
+  const [nextTaskEta, setNextTaskEta] = useState("1 Hour");
   
   // Logout Checklist state
   const [logoutTasks, setLogoutTasks] = useState([]);
   
   // Anti-spam email trigger guards
   const [emailTriggeredType, setEmailTriggeredType] = useState(null);
+
+  // Notification level tracking to avoid spam using refs to prevent stale closure bugs in setInterval
+  const lastNotifiedPlanLevelRef = useRef(null);
+  const lastNotifiedReportLevelRef = useRef(null);
 
   // Request Notification permission
   useEffect(() => {
@@ -117,9 +131,12 @@ export function StrictReportingManager({ user, onLogout }) {
           setTodayPlanTasks(tasks);
           if (tasks.length > 0) {
             setSelectedTaskId(String(tasks[0].id));
+            setSelectedNextTaskId(String(tasks[0].id));
             setIsCustomTask(false);
+            setIsNextTaskCustom(false);
           } else {
             setIsCustomTask(true);
+            setIsNextTaskCustom(true);
           }
         })
         .catch((err) => console.error("Failed to load today's plan tasks:", err));
@@ -128,21 +145,62 @@ export function StrictReportingManager({ user, onLogout }) {
 
   // Alert & Desktop Notification helper
   const handleAlerts = (alertLevel, type) => {
-    if (alertLevel <= 0) return;
+    const isPlan = type === "plan";
     
-    // HTML5 System Notification
-    if ("Notification" in window && Notification.permission === "granted") {
-      let bodyText = "";
-      if (type === "plan") {
-        bodyText = `Your Daily Work Plan is pending! Please submit it immediately.`;
+    let title = "";
+    if (isPlan) {
+      if (alertLevel === 0) {
+        title = "Daily Work Plan Required";
       } else {
-        bodyText = `Your 30-Minute Progress Report is due! Screen is locked until submitted.`;
+        title = `[Reminder ${alertLevel}] Daily Work Plan Pending`;
       }
+    } else {
+      if (alertLevel === 0) {
+        title = "Work Progress Report Due";
+      } else {
+        title = `[Reminder ${alertLevel}] Work Progress Report Due`;
+      }
+    }
+    
+    let bodyText = "";
+    if (isPlan) {
+      if (alertLevel === 0) {
+        bodyText = "Please submit your Today's Plan to unlock the CRM.";
+      } else {
+        bodyText = `Reminder ${alertLevel}: Please submit your Today's Plan to unlock the CRM.`;
+      }
+    } else {
+      if (alertLevel === 0) {
+        bodyText = "Please submit your 30 min work report.";
+      } else {
+        bodyText = `Reminder ${alertLevel}: Please submit your 30 min work report.`;
+      }
+    }
 
-      new Notification("CRM strict reporting alert", {
-        body: bodyText,
-        requireInteraction: true, // Keep notification until user interacts with it
-      });
+    const lastLevel = isPlan ? lastNotifiedPlanLevelRef.current : lastNotifiedReportLevelRef.current;
+    if (lastLevel !== alertLevel) {
+      if ("Notification" in window && Notification.permission === "granted") {
+        const notif = new Notification(title, {
+          body: bodyText,
+          icon: "/logo.png",
+          requireInteraction: true, // Keep notification until user interacts with it
+        });
+        notif.onclick = function(event) {
+          event.preventDefault();
+          window.focus();
+          if (isPlan) {
+            window.dispatchEvent(new CustomEvent("erp:open_plan_modal"));
+          } else {
+            window.dispatchEvent(new CustomEvent("erp:navigate", { detail: { page: "hourly-reports" } }));
+          }
+          notif.close();
+        };
+      }
+      if (isPlan) {
+        lastNotifiedPlanLevelRef.current = alertLevel;
+      } else {
+        lastNotifiedReportLevelRef.current = alertLevel;
+      }
     }
 
     // Trigger Email warning if Alert Level 3 is reached
@@ -216,9 +274,13 @@ export function StrictReportingManager({ user, onLogout }) {
       }
     }
     try {
+      if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission();
+      }
       await api.submitDailyPlan(tasksToSubmit);
       notify("Daily plan submitted successfully!", "success");
       setShowPlanModal(false);
+      lastNotifiedPlanLevelRef.current = null;
       setEmailTriggeredType(null);
       // Force refresh status
       const data = await api.strictReportingStatus();
@@ -231,26 +293,108 @@ export function StrictReportingManager({ user, onLogout }) {
   // Submit Work Progress Report
   const handleProgressSubmit = async (e) => {
     e.preventDefault();
-    if (isCustomTask && !customTaskTitle.trim()) {
-      notify("Please enter custom task title.", "error");
+    
+    if (isCustomTask && (!customTaskTitle.trim() || !customTaskDesc.trim())) {
+      notify("Please fill all details for the current custom task.", "error");
       return;
     }
-    if (!progressDesc.trim() || !nextTaskDesc.trim()) {
-      notify("Please fill progress and next task descriptions.", "error");
+    if (!progressDesc.trim()) {
+      notify("Please fill progress descriptions.", "error");
       return;
     }
+
+    let finalNextTaskTitle = "";
+    if (isNextTaskCustom) {
+      if (!nextTaskTitle.trim() || !nextTaskDesc.trim()) {
+        notify("Please fill all details for the next custom task.", "error");
+        return;
+      }
+      finalNextTaskTitle = nextTaskTitle.trim();
+    } else {
+      const nextTaskObj = todayPlanTasks.find(t => String(t.id) === String(selectedNextTaskId));
+      if (!nextTaskObj) {
+        notify("Please select next task or add a new one.", "error");
+        return;
+      }
+      finalNextTaskTitle = nextTaskObj.work_title;
+    }
+
     try {
+      // Build list of new tasks to append
+      const tasksToAppend = [];
+      if (isCustomTask) {
+        tasksToAppend.push({
+          work_title: customTaskTitle.trim(),
+          description: customTaskDesc.trim(),
+          count: customTaskCount ? Number(customTaskCount) : null,
+          eta_time: customTaskEta
+        });
+      }
+      if (isNextTaskCustom) {
+        // Prevent appending the same task title twice in one go
+        const isDuplicate = isCustomTask && (customTaskTitle.trim().toLowerCase() === nextTaskTitle.trim().toLowerCase());
+        if (!isDuplicate) {
+          tasksToAppend.push({
+            work_title: nextTaskTitle.trim(),
+            description: nextTaskDesc.trim(),
+            count: nextTaskCount ? Number(nextTaskCount) : null,
+            eta_time: nextTaskEta
+          });
+        }
+      }
+
+      let savedTasks = [];
+      let finalDailyWorkPlanId = isCustomTask ? null : Number(selectedTaskId);
+
+      // If we have tasks to append, do it now
+      if (tasksToAppend.length > 0) {
+        const existingTasks = todayPlanTasks.map(t => ({
+          work_title: t.work_title,
+          description: t.description,
+          count: t.count,
+          eta_time: t.eta_time
+        }));
+        
+        savedTasks = await api.submitDailyPlan([...existingTasks, ...tasksToAppend]);
+        
+        // Find the database ID for the newly created current custom task if we created one
+        if (isCustomTask) {
+          const matchedSavedTask = savedTasks.find(
+            t => t.work_title.toLowerCase().trim() === customTaskTitle.trim().toLowerCase()
+          );
+          if (matchedSavedTask) {
+            finalDailyWorkPlanId = matchedSavedTask.id;
+          }
+        }
+      }
+
+      if ("Notification" in window && Notification.permission === "default") {
+        Notification.requestPermission();
+      }
       await api.submitProgressReport({
-        daily_work_plan_id: isCustomTask ? null : Number(selectedTaskId),
+        daily_work_plan_id: finalDailyWorkPlanId,
         custom_task_title: isCustomTask ? customTaskTitle : null,
         progress_description: progressDesc,
-        next_task: nextTaskDesc
+        next_task: finalNextTaskTitle
       });
+
       notify("Progress report submitted successfully!", "success");
       setShowProgressModal(false);
-      setProgressDesc("");
-      setNextTaskDesc("");
+      lastNotifiedReportLevelRef.current = null;
+      
+      // Reset current custom task states
       setCustomTaskTitle("");
+      setCustomTaskDesc("");
+      setCustomTaskCount("");
+      setCustomTaskEta("1 Hour");
+      
+      // Reset next custom task states
+      setProgressDesc("");
+      setNextTaskTitle("");
+      setNextTaskDesc("");
+      setNextTaskCount("");
+      setNextTaskEta("1 Hour");
+      
       setEmailTriggeredType(null);
       
       const data = await api.strictReportingStatus();
@@ -312,11 +456,11 @@ export function StrictReportingManager({ user, onLogout }) {
       {showPlanModal && (
         <div className="strict-blocker-overlay">
           <div className="strict-blocker-card">
-            <header className="strict-header">
+            <div className="strict-header">
               <div className="icon-warning-pulse"><Lock size={20} /></div>
               <h2>Submit Your Today's Plan</h2>
               <p>You must outline your tasks for the day before you can access the CRM.</p>
-            </header>
+            </div>
 
             {/* Carry Over Section */}
             {unfinishedTasks.length > 0 && (
@@ -395,6 +539,12 @@ export function StrictReportingManager({ user, onLogout }) {
               </div>
             )}
 
+            {("Notification" in window) && Notification.permission === "denied" && (
+              <div style={{ padding: "8px 16px", background: "#fef2f2", borderTop: "1px solid #fee2e2", borderBottom: "1px solid #fee2e2", color: "#991b1b", fontSize: "0.75rem", textAlign: "center" }}>
+                ⚠️ <strong>Desktop Notifications are Blocked!</strong> Please click the padlock icon next to your URL bar and set Notifications to <strong>Allow</strong>.
+              </div>
+            )}
+
             <footer className="strict-footer">
               <button type="button" className="primary full-width" onClick={handlePlanSubmit}>
                 <CheckCircle size={16} /> Submit & Unlock CRM
@@ -408,11 +558,11 @@ export function StrictReportingManager({ user, onLogout }) {
       {showProgressModal && (
         <div className="strict-blocker-overlay">
           <div className="strict-blocker-card">
-            <header className="strict-header">
+            <div className="strict-header">
               <div className="icon-warning-pulse"><Clock size={20} /></div>
               <h2>Work Progress Report Due!</h2>
               <p>Please log your progress report. Navigation is locked until submitted.</p>
-            </header>
+            </div>
 
             <form onSubmit={handleProgressSubmit} className="strict-report-form">
               <div className="form-group">
@@ -431,9 +581,10 @@ export function StrictReportingManager({ user, onLogout }) {
                   ) : (
                     <input
                       type="text"
-                      placeholder="Enter custom task name..."
+                      placeholder="Enter custom task title..."
                       value={customTaskTitle}
                       onChange={(e) => setCustomTaskTitle(e.target.value)}
+                      required
                     />
                   )}
                   <button
@@ -445,6 +596,36 @@ export function StrictReportingManager({ user, onLogout }) {
                   </button>
                 </div>
               </div>
+
+              {isCustomTask && (
+                <div className="add-task-inline-form" style={{ marginTop: "12px", border: "1px dashed #cbd5e1", padding: "12px", borderRadius: "8px" }}>
+                  <h3 style={{ fontSize: "0.875rem", margin: "0 0 8px 0" }}>Enter Details for This Custom Task</h3>
+                  <div className="inline-grid-inputs" style={{ marginBottom: "8px" }}>
+                    <input
+                      type="number"
+                      placeholder="Count / Targets (Optional)"
+                      value={customTaskCount}
+                      onChange={(e) => setCustomTaskCount(e.target.value)}
+                    />
+                    <select value={customTaskEta} onChange={(e) => setCustomTaskEta(e.target.value)}>
+                      <option value="15 Mins">15 Mins</option>
+                      <option value="30 Mins">30 Mins</option>
+                      <option value="1 Hour">1 Hour</option>
+                      <option value="2 Hours">2 Hours</option>
+                      <option value="4 Hours">4 Hours</option>
+                      <option value="Full Day">Full Day</option>
+                    </select>
+                  </div>
+                  <textarea
+                    placeholder="Describe what you plan to accomplish... *"
+                    value={customTaskDesc}
+                    onChange={(e) => setCustomTaskDesc(e.target.value)}
+                    rows={2}
+                    style={{ marginBottom: 0 }}
+                    required
+                  />
+                </div>
+              )}
 
               <div className="form-group">
                 <label>What progress did you make? *</label>
@@ -459,16 +640,73 @@ export function StrictReportingManager({ user, onLogout }) {
 
               <div className="form-group">
                 <label>What will you work on next? *</label>
-                <textarea
-                  placeholder="What is your next priority task?"
-                  value={nextTaskDesc}
-                  onChange={(e) => setNextTaskDesc(e.target.value)}
-                  required
-                  rows={2}
-                />
+                <div className="task-select-wrapper">
+                  {!isNextTaskCustom ? (
+                    <select
+                      value={selectedNextTaskId}
+                      onChange={(e) => setSelectedNextTaskId(e.target.value)}
+                      disabled={todayPlanTasks.length === 0}
+                    >
+                      {todayPlanTasks.map((t) => (
+                        <option key={t.id} value={t.id}>{t.work_title}</option>
+                      ))}
+                    </select>
+                  ) : (
+                    <input
+                      type="text"
+                      placeholder="Enter next task title..."
+                      value={nextTaskTitle}
+                      onChange={(e) => setNextTaskTitle(e.target.value)}
+                      required
+                    />
+                  )}
+                  <button
+                    type="button"
+                    className="secondary small"
+                    onClick={() => setIsNextTaskCustom(!isNextTaskCustom)}
+                  >
+                    {isNextTaskCustom ? "Select Planned Task" : "Add Other Task"}
+                  </button>
+                </div>
               </div>
 
-              <button className="primary full-width">
+              {isNextTaskCustom && (
+                <div className="add-task-inline-form" style={{ marginTop: "12px", border: "1px dashed #cbd5e1", padding: "12px", borderRadius: "8px" }}>
+                  <h3 style={{ fontSize: "0.875rem", margin: "0 0 8px 0" }}>Enter Details for Next Task</h3>
+                  <div className="inline-grid-inputs" style={{ marginBottom: "8px" }}>
+                    <input
+                      type="number"
+                      placeholder="Count / Targets (Optional)"
+                      value={nextTaskCount}
+                      onChange={(e) => setNextTaskCount(e.target.value)}
+                    />
+                    <select value={nextTaskEta} onChange={(e) => setNextTaskEta(e.target.value)}>
+                      <option value="15 Mins">15 Mins</option>
+                      <option value="30 Mins">30 Mins</option>
+                      <option value="1 Hour">1 Hour</option>
+                      <option value="2 Hours">2 Hours</option>
+                      <option value="4 Hours">4 Hours</option>
+                      <option value="Full Day">Full Day</option>
+                    </select>
+                  </div>
+                  <textarea
+                    placeholder="Describe what you plan to accomplish... *"
+                    value={nextTaskDesc}
+                    onChange={(e) => setNextTaskDesc(e.target.value)}
+                    rows={2}
+                    style={{ marginBottom: 0 }}
+                    required
+                  />
+                </div>
+              )}
+
+              {("Notification" in window) && Notification.permission === "denied" && (
+                <div style={{ padding: "8px 12px", background: "#fef2f2", border: "1px solid #fee2e2", borderRadius: "6px", color: "#991b1b", fontSize: "0.75rem", marginTop: "12px", textAlign: "center" }}>
+                  ⚠️ <strong>Desktop Notifications are Blocked!</strong> Please click the padlock icon next to your URL bar and set Notifications to <strong>Allow</strong>.
+                </div>
+              )}
+
+              <button className="primary full-width" style={{ marginTop: "16px" }}>
                 <CheckCircle size={16} /> Submit Progress Report
               </button>
             </form>
@@ -480,11 +718,11 @@ export function StrictReportingManager({ user, onLogout }) {
       {showLogoutModal && (
         <div className="strict-blocker-overlay">
           <div className="strict-blocker-card wide">
-            <header className="strict-header">
+            <div className="strict-header">
               <div className="icon-warning-pulse"><LogOut size={20} /></div>
               <h2>End-of-Day Task Checklist</h2>
               <p>Select the status and provide comments for each planned task before logging out.</p>
-            </header>
+            </div>
 
             <div className="logout-checklist-table-wrapper">
               <table className="logout-checklist-table">
@@ -587,7 +825,13 @@ export function StrictReportingManager({ user, onLogout }) {
         .strict-header {
           padding: 24px;
           border-bottom: 1px solid #f1f5f9;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
           text-align: center;
+          width: 100%;
+          box-sizing: border-box;
         }
 
         .strict-header h2 {
@@ -613,6 +857,8 @@ export function StrictReportingManager({ user, onLogout }) {
           background: #fee2e2;
           color: #ef4444;
           animation: pulseSR 2s infinite;
+          margin-bottom: 12px;
+          flex-shrink: 0;
         }
 
         @keyframes pulseSR {
@@ -766,6 +1012,8 @@ export function StrictReportingManager({ user, onLogout }) {
 
         .strict-report-form {
           padding: 24px;
+          flex: 1;
+          overflow-y: auto;
         }
 
         .form-group {

@@ -63,12 +63,14 @@ def send_daily_report_task():
     logger.info("Executing scheduled daily email report task...")
     db = SessionLocal()
     try:
-        config = db.query(EmailReportConfig).first()
-        if not config or not config.is_active:
+        from app.core.settings import get_system_setting
+        is_active_str = get_system_setting(db, "email_smtp", "is_active", "false")
+        if is_active_str.lower() != "true":
             logger.info("No active report configuration found. Skipping.")
             return
             
-        to_emails = json.loads(config.to_emails or "[]")
+        to_emails_str = get_system_setting(db, "email_smtp", "to_emails", "[]")
+        to_emails = json.loads(to_emails_str or "[]")
         if not to_emails:
             logger.info("No recipient emails configured. Skipping.")
             return
@@ -87,11 +89,20 @@ def send_daily_report_task():
         data = get_report_data(db, today)
         excel_bytes = generate_excel_report(data, today)
         
+        smtp_host = get_system_setting(db, "email_smtp", "smtp_host", "smtp.office365.com")
+        smtp_port_str = get_system_setting(db, "email_smtp", "smtp_port", "587")
+        try:
+            smtp_port = int(smtp_port_str)
+        except Exception:
+            smtp_port = 587
+        smtp_user = get_system_setting(db, "email_smtp", "smtp_user", "")
+        smtp_pass = get_system_setting(db, "email_smtp", "smtp_password", "")
+
         send_outlook_email(
-            smtp_host=config.smtp_host,
-            smtp_port=config.smtp_port,
-            smtp_user=config.smtp_user,
-            smtp_pass=config.smtp_password,
+            smtp_host=smtp_host,
+            smtp_port=smtp_port,
+            smtp_user=smtp_user,
+            smtp_pass=smtp_pass,
             to_emails=to_emails,
             excel_bytes=excel_bytes,
             target_date=today
@@ -136,28 +147,17 @@ def start_scheduler():
         db.close()
 
 def reschedule_report_job(db: Session):
-    config = db.query(EmailReportConfig).first()
-    if not config:
-        config = EmailReportConfig(
-            smtp_host="smtp.office365.com",
-            smtp_port=587,
-            smtp_user="",
-            smtp_password="",
-            to_emails="[]",
-            schedule_time="20:00",
-            is_active=False
-        )
-        db.add(config)
-        db.commit()
-        db.refresh(config)
+    from app.core.settings import get_system_setting
+    is_active_str = get_system_setting(db, "email_smtp", "is_active", "false")
+    schedule_time = get_system_setting(db, "email_smtp", "schedule_time", "20:00")
         
-    if config.is_active:
+    if is_active_str.lower() == "true":
         try:
-            time_parts = config.schedule_time.split(":")
+            time_parts = schedule_time.split(":")
             hour = int(time_parts[0])
             minute = int(time_parts[1])
         except Exception:
-            logger.error(f"Invalid schedule time format: {config.schedule_time}. Defaulting to 20:00.")
+            logger.error(f"Invalid schedule time format: {schedule_time}. Defaulting to 20:00.")
             hour, minute = 20, 0
             
         scheduler.update_config(hour, minute, True)

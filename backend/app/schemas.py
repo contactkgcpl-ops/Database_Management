@@ -69,6 +69,8 @@ class UserOut(BaseModel):
     role_name: str | None = None
     permissions: list[str] = []
     company_ids: str | None = None
+    restrict_reporting: bool = False
+    crm_notification_email: str | None = None
 
 
 class PropertyOptionBase(BaseModel):

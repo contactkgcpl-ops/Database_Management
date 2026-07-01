@@ -102,6 +102,8 @@ async def parse_user_payload(request: Request, require_password: bool) -> tuple[
         "is_active": optional_bool(data.get("is_active"), True),
         "remove_image": optional_bool(data.get("remove_image"), False),
         "company_ids": str(data.get("company_ids") or "").strip() or None,
+        "restrict_reporting": optional_bool(data.get("restrict_reporting"), False),
+        "crm_notification_email": str(data.get("crm_notification_email") or "").strip() or None,
     }
     password = str(data.get("password") or "")
     if require_password and len(password) < 6:
@@ -175,6 +177,8 @@ async def create_user(
         profile_image_url=image_url,
         is_active=payload["is_active"],
         company_ids=payload["company_ids"],
+        restrict_reporting=payload["restrict_reporting"],
+        crm_notification_email=payload["crm_notification_email"],
     )
     db.add(user)
     db.commit()
@@ -205,6 +209,8 @@ async def update_user(
     user.parent_id = payload["parent_id"]
     user.is_active = payload["is_active"]
     user.company_ids = payload["company_ids"]
+    user.restrict_reporting = payload["restrict_reporting"]
+    user.crm_notification_email = payload["crm_notification_email"]
     if payload.get("password"):
         user.hashed_password = hash_password(payload["password"])
     db.commit()

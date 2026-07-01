@@ -64,6 +64,9 @@ class WorkProgressReportOut(BaseModel):
     user_id: int
     work_date: date
     reported_at: datetime
+    due_at: Optional[datetime] = None
+    late_minutes: int = 0
+    reminders_sent: int = 0
     daily_work_plan_id: Optional[int] = None
     custom_task_title: Optional[str] = None
     progress_description: str
@@ -80,3 +83,8 @@ class ReportingStatusCheckOut(BaseModel):
     config: StrictReportingConfigOut
     is_on_break: bool
     alert_level: int  # 0: none, 1: alert 1, 2: alert 2, 3: alert 3 (email alert)
+
+class WorkProgressReportDetailOut(WorkProgressReportOut):
+    user_name: str
+    user_email: str
+    task_title: Optional[str] = None

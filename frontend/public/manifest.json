@@ -1,0 +1,16 @@
+{
+  "short_name": "Salvin ERP",
+  "name": "Salvin Marketing & Sales ERP",
+  "icons": [
+    {
+      "src": "/logo.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#0f172a",
+  "theme_color": "#176b5b",
+  "display": "standalone",
+  "orientation": "portrait"
+}

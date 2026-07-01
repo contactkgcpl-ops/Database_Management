@@ -23,6 +23,8 @@ def serialize_user(user: User) -> UserOut:
         role_name=user.role.name if user.role else None,
         permissions=user_permission_codes(user),
         company_ids=user.company_ids,
+        restrict_reporting=bool(user.restrict_reporting),
+        crm_notification_email=user.crm_notification_email,
     )
 
 

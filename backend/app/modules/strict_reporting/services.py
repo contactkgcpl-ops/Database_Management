@@ -74,10 +74,17 @@ def get_reporting_status(db: Session, user: User) -> dict:
     config = get_or_create_config(db)
     today = date.today()
     
+    # Check if daily plan has been submitted today
+    plan_tasks = db.query(DailyWorkPlan).filter(
+        DailyWorkPlan.user_id == user.id,
+        DailyWorkPlan.work_date == today
+    ).all()
+    plan_submitted = len(plan_tasks) > 0
+    
     # Default values if not logged in or restricted
     res = {
         "restrict_reporting": bool(user.restrict_reporting),
-        "plan_submitted": False,
+        "plan_submitted": plan_submitted,
         "minutes_since_login": 0,
         "minutes_since_last_report": 0,
         "config": config,
@@ -118,15 +125,7 @@ def get_reporting_status(db: Session, user: User) -> dict:
     minutes_since_login = int(active_work_sec // 60)
     res["minutes_since_login"] = minutes_since_login
 
-    # 2. Check if daily plan has been submitted
-    plan_tasks = db.query(DailyWorkPlan).filter(
-        DailyWorkPlan.user_id == user.id,
-        DailyWorkPlan.work_date == today
-    ).all()
-    plan_submitted = len(plan_tasks) > 0
-    res["plan_submitted"] = plan_submitted
-
-    # 3. Calculate active seconds since last progress report
+    # 2. Calculate active seconds since last progress report
     if plan_submitted:
         last_report = db.query(WorkProgressReport).filter(
             WorkProgressReport.user_id == user.id,
@@ -174,25 +173,36 @@ def get_reporting_status(db: Session, user: User) -> dict:
 
 def submit_plan(db: Session, user: User, tasks: list[DailyWorkPlanCreate]) -> list[DailyWorkPlan]:
     today = date.today()
-    # Delete existing plan tasks for today before inserting to avoid duplicates
-    db.query(DailyWorkPlan).filter(
+    
+    # Query existing daily plans for today
+    existing_plans = db.query(DailyWorkPlan).filter(
         DailyWorkPlan.user_id == user.id,
         DailyWorkPlan.work_date == today
-    ).delete()
+    ).all()
+    
+    existing_by_title = {p.work_title.lower().strip(): p for p in existing_plans}
     
     created_plans = []
     for task in tasks:
-        plan = DailyWorkPlan(
-            user_id=user.id,
-            work_date=today,
-            work_title=task.work_title,
-            description=task.description,
-            count=task.count,
-            eta_time=task.eta_time,
-            status="planned"
-        )
-        db.add(plan)
+        title_key = task.work_title.lower().strip()
+        if title_key in existing_by_title:
+            plan = existing_by_title[title_key]
+            plan.description = task.description
+            plan.count = task.count
+            plan.eta_time = task.eta_time
+        else:
+            plan = DailyWorkPlan(
+                user_id=user.id,
+                work_date=today,
+                work_title=task.work_title,
+                description=task.description,
+                count=task.count,
+                eta_time=task.eta_time,
+                status="planned"
+            )
+            db.add(plan)
         created_plans.append(plan)
+        
     db.commit()
     for plan in created_plans:
         db.refresh(plan)
@@ -223,11 +233,27 @@ def get_previous_unfinished_tasks(db: Session, user: User) -> list[DailyWorkPlan
     ).all()
 
 def submit_progress_report(db: Session, user: User, payload: WorkProgressReportCreate) -> WorkProgressReport:
+    from datetime import timedelta
     today = date.today()
+    
+    # Calculate reporting stats
+    status = get_reporting_status(db, user)
+    limit_minutes = status["config"].report_interval_minutes
+    active_minutes = status["minutes_since_last_report"]
+    
+    late_min = max(0, active_minutes - limit_minutes)
+    reminders = status["alert_level"]
+    
+    now_time = datetime.utcnow()
+    due_time = now_time - timedelta(minutes=(active_minutes - limit_minutes))
+    
     report = WorkProgressReport(
         user_id=user.id,
         work_date=today,
-        reported_at=datetime.utcnow(),
+        reported_at=now_time,
+        due_at=due_time,
+        late_minutes=late_min,
+        reminders_sent=reminders,
         daily_work_plan_id=payload.daily_work_plan_id,
         custom_task_title=payload.custom_task_title,
         progress_description=payload.progress_description,
@@ -255,14 +281,24 @@ def send_custom_email(db: Session, to_emails: list[str], cc_emails: list[str], s
     import smtplib
     from email.mime.multipart import MIMEMultipart
     from email.mime.text import MIMEText
+    from app.core.settings import get_system_setting
 
-    config = db.query(EmailReportConfig).first()
-    if not config or not config.smtp_user or not config.smtp_password:
-        print("SMTP credentials are not configured in EmailReportConfig.")
+    smtp_host = get_system_setting(db, "email_smtp", "smtp_host", "smtp.office365.com")
+    smtp_port_str = get_system_setting(db, "email_smtp", "smtp_port", "587")
+    smtp_user = get_system_setting(db, "email_smtp", "smtp_user", "")
+    smtp_password = get_system_setting(db, "email_smtp", "smtp_password", "")
+
+    if not smtp_user or not smtp_password:
+        print("SMTP credentials are not configured in system settings.")
         return
 
+    try:
+        smtp_port = int(smtp_port_str)
+    except Exception:
+        smtp_port = 587
+
     msg = MIMEMultipart()
-    msg['From'] = config.smtp_user
+    msg['From'] = smtp_user
     msg['To'] = ", ".join(to_emails)
     if cc_emails:
         msg['Cc'] = ", ".join(cc_emails)
@@ -271,10 +307,15 @@ def send_custom_email(db: Session, to_emails: list[str], cc_emails: list[str], s
 
     all_recipients = to_emails + (cc_emails or [])
 
-    server = smtplib.SMTP(config.smtp_host, config.smtp_port)
-    server.starttls()
-    server.login(config.smtp_user, config.smtp_password)
-    server.sendmail(config.smtp_user, all_recipients, msg.as_string())
+    print(f"Connecting to SMTP server {smtp_host}:{smtp_port}...")
+    if smtp_port == 465:
+        server = smtplib.SMTP_SSL(smtp_host, smtp_port)
+    else:
+        server = smtplib.SMTP(smtp_host, smtp_port)
+        server.starttls()
+        
+    server.login(smtp_user, smtp_password)
+    server.sendmail(smtp_user, all_recipients, msg.as_string())
     server.quit()
     print(f"SMTP Alert Sent to {to_emails} CC {cc_emails}")
 

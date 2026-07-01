@@ -564,6 +564,27 @@ def migrate_hourly_reports_calling_schema(db: Session) -> None:
         db.commit()
 
 
+def migrate_strict_reporting(db: Session) -> None:
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    if "users" not in tables:
+        return
+
+    columns = {column["name"] for column in inspector.get_columns("users")}
+    dialect = engine.dialect.name
+    
+    if "restrict_reporting" not in columns:
+        if dialect == "mysql":
+            db.execute(text("ALTER TABLE users ADD COLUMN restrict_reporting BOOL NOT NULL DEFAULT 0"))
+        else:
+            db.execute(text("ALTER TABLE users ADD COLUMN restrict_reporting BOOLEAN NOT NULL DEFAULT 0"))
+            
+    if "crm_notification_email" not in columns:
+        db.execute(text("ALTER TABLE users ADD COLUMN crm_notification_email VARCHAR(255) NULL"))
+        
+    db.commit()
+
+
 def migrate_all(db: Session) -> None:
     # 1. First, update the 'properties' table schema so ORM queries don't fail
     migrate_property_filter_type(db)
@@ -587,6 +608,43 @@ def migrate_all(db: Session) -> None:
     migrate_hourly_reports_calling_schema(db)
     migrate_leave_requests_half_days(db)
     migrate_our_companies_schema(db)
+    migrate_strict_reporting(db)
+    migrate_system_settings(db)
+    migrate_progress_reports_late_tracking(db)
+
+def migrate_system_settings(db: Session) -> None:
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    
+    if "system_settings" not in tables:
+        dialect = engine.dialect.name
+        if dialect == "mysql":
+            db.execute(text("""
+                CREATE TABLE system_settings (
+                    id INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    setting_group VARCHAR(100) NOT NULL,
+                    setting_key VARCHAR(100) NOT NULL UNIQUE,
+                    setting_value TEXT,
+                    created_at DATETIME,
+                    updated_at DATETIME,
+                    INDEX ix_system_settings_group (setting_group),
+                    INDEX ix_system_settings_key (setting_key)
+                )
+            """))
+        else:
+            db.execute(text("""
+                CREATE TABLE system_settings (
+                    id INTEGER PRIMARY KEY,
+                    setting_group VARCHAR(100) NOT NULL,
+                    setting_key VARCHAR(100) NOT NULL UNIQUE,
+                    setting_value TEXT,
+                    created_at DATETIME,
+                    updated_at DATETIME
+                )
+            """))
+            db.execute(text("CREATE INDEX ix_system_settings_group ON system_settings (setting_group)"))
+            db.execute(text("CREATE UNIQUE INDEX ix_system_settings_key ON system_settings (setting_key)"))
+        db.commit()
 
 def migrate_leave_requests_half_days(db: Session) -> None:
     inspector = inspect(engine)
@@ -651,5 +709,21 @@ def migrate_our_companies_schema(db: Session) -> None:
             """))
             db.execute(text("CREATE UNIQUE INDEX ix_our_companies_name ON our_companies (name)"))
         db.commit()
+
+
+def migrate_progress_reports_late_tracking(db: Session) -> None:
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    if "work_progress_reports" not in tables:
+        return
+    columns = {column["name"] for column in inspector.get_columns("work_progress_reports")}
+    dialect = engine.dialect.name
+    if "due_at" not in columns:
+        db.execute(text("ALTER TABLE work_progress_reports ADD COLUMN due_at DATETIME NULL"))
+    if "late_minutes" not in columns:
+        db.execute(text("ALTER TABLE work_progress_reports ADD COLUMN late_minutes INTEGER NOT NULL DEFAULT 0"))
+    if "reminders_sent" not in columns:
+        db.execute(text("ALTER TABLE work_progress_reports ADD COLUMN reminders_sent INTEGER NOT NULL DEFAULT 0"))
+    db.commit()
 
 

@@ -56,6 +56,8 @@ class User(Base, TimestampMixin):
     parent_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"))
     profile_image_url: Mapped[str | None] = mapped_column(Text)
     company_ids: Mapped[str | None] = mapped_column(Text)
+    restrict_reporting: Mapped[bool] = mapped_column(Boolean, default=False)
+    crm_notification_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     role: Mapped[Role | None] = relationship(back_populates="users")
     parent: Mapped["User | None"] = relationship(remote_side=[id])
 
@@ -563,12 +565,61 @@ class EmailReportLog(Base, TimestampMixin):
     recipients: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class StrictReportingConfig(Base, TimestampMixin):
+    __tablename__ = "strict_reporting_configs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    plan_submission_limit_minutes: Mapped[int] = mapped_column(Integer, default=15)
+    report_interval_minutes: Mapped[int] = mapped_column(Integer, default=30)
+    alert_interval_1_minutes: Mapped[int] = mapped_column(Integer, default=5)
+    alert_interval_2_minutes: Mapped[int] = mapped_column(Integer, default=10)
+    alert_interval_3_minutes: Mapped[int] = mapped_column(Integer, default=15)
+    logout_report_cutoff_time: Mapped[str] = mapped_column(String(10), default="19:00")
+    cc_emails_json: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
+class DailyWorkPlan(Base, TimestampMixin):
+    __tablename__ = "daily_work_plans"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    work_date: Mapped[date] = mapped_column(Date, index=True)
+    work_title: Mapped[str] = mapped_column(String(255))
+    description: Mapped[str] = mapped_column(Text)
+    count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    eta_time: Mapped[str] = mapped_column(String(50))
+    status: Mapped[str] = mapped_column(String(20), default="planned")  # planned, done, pending, ongoing
+    ongoing_remark: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
 
 
+class WorkProgressReport(Base, TimestampMixin):
+    __tablename__ = "work_progress_reports"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    work_date: Mapped[date] = mapped_column(Date, index=True)
+    reported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    late_minutes: Mapped[int] = mapped_column(Integer, default=0)
+    reminders_sent: Mapped[int] = mapped_column(Integer, default=0)
+    daily_work_plan_id: Mapped[int | None] = mapped_column(ForeignKey("daily_work_plans.id", ondelete="SET NULL"), nullable=True)
+    custom_task_title: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    progress_description: Mapped[str] = mapped_column(Text)
+    next_task: Mapped[str] = mapped_column(Text)
+
+    user: Mapped["User"] = relationship(foreign_keys=[user_id])
+    daily_work_plan: Mapped[DailyWorkPlan | None] = relationship(foreign_keys=[daily_work_plan_id])
 
 
+class SystemSetting(Base, TimestampMixin):
+    __tablename__ = "system_settings"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    setting_group: Mapped[str] = mapped_column(String(100), index=True)
+    setting_key: Mapped[str] = mapped_column(String(100), unique=True, index=True)
+    setting_value: Mapped[str | None] = mapped_column(Text, nullable=True)
 
 
 

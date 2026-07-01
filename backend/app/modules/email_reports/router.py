@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from io import BytesIO
 
 from app.db import get_db
-from app.models import User, EmailReportConfig, EmailReportLog
+from app.models import User, EmailReportLog
 from app.schemas import EmailReportConfigOut, EmailReportConfigUpdate, EmailReportLogOut
 from app.deps import current_user, require_permission
 from app.modules.email_reports.services import get_report_data
@@ -100,42 +100,44 @@ def send_report_now(
         db.commit()
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
 
+from app.core.settings import get_system_setting, set_system_setting
+
 @router.get("/config", response_model=EmailReportConfigOut)
 def get_report_config(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("reports.view"))
 ):
-    config = db.query(EmailReportConfig).first()
-    if not config:
-        config = EmailReportConfig(
-            smtp_host="smtp.office365.com",
-            smtp_port=587,
-            smtp_user="",
-            smtp_password="",
-            to_emails="[]",
-            schedule_time="20:00",
-            is_active=False
-        )
-        db.add(config)
-        db.commit()
-        db.refresh(config)
+    smtp_host = get_system_setting(db, "email_smtp", "smtp_host", "smtp.office365.com")
+    smtp_port_str = get_system_setting(db, "email_smtp", "smtp_port", "587")
+    smtp_user = get_system_setting(db, "email_smtp", "smtp_user", "")
+    smtp_password = get_system_setting(db, "email_smtp", "smtp_password", "")
+    to_emails_str = get_system_setting(db, "email_smtp", "to_emails", "[]")
+    schedule_time = get_system_setting(db, "email_smtp", "schedule_time", "20:00")
+    is_active_str = get_system_setting(db, "email_smtp", "is_active", "false")
+    
+    try:
+        smtp_port = int(smtp_port_str)
+    except Exception:
+        smtp_port = 587
         
     try:
-        emails = json.loads(config.to_emails)
+        emails = json.loads(to_emails_str)
     except Exception:
         emails = []
         
+    is_active = (is_active_str.lower() == "true")
+        
     return EmailReportConfigOut(
-        id=config.id,
-        smtp_host=config.smtp_host,
-        smtp_port=config.smtp_port,
-        smtp_user=config.smtp_user,
+        id=1,
+        smtp_host=smtp_host,
+        smtp_port=smtp_port,
+        smtp_user=smtp_user,
         to_emails=emails,
-        schedule_time=config.schedule_time,
-        is_active=config.is_active,
-        has_password=bool(config.smtp_password),
-        created_at=config.created_at,
-        updated_at=config.updated_at
+        schedule_time=schedule_time,
+        is_active=is_active,
+        has_password=bool(smtp_password),
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
     )
 
 @router.put("/config", response_model=EmailReportConfigOut)
@@ -144,44 +146,55 @@ def update_report_config(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_permission("reports.config"))
 ):
-    config = db.query(EmailReportConfig).first()
-    if not config:
-        config = EmailReportConfig()
-        db.add(config)
-        
     if payload.smtp_host is not None:
-        config.smtp_host = payload.smtp_host
+        set_system_setting(db, "email_smtp", "smtp_host", payload.smtp_host)
     if payload.smtp_port is not None:
-        config.smtp_port = payload.smtp_port
+        set_system_setting(db, "email_smtp", "smtp_port", str(payload.smtp_port))
     if payload.smtp_user is not None:
-        config.smtp_user = payload.smtp_user
-    # Only update password if a new non-empty password is submitted
+        set_system_setting(db, "email_smtp", "smtp_user", payload.smtp_user)
     if payload.smtp_password is not None and payload.smtp_password.strip() != "":
-        config.smtp_password = payload.smtp_password
+        set_system_setting(db, "email_smtp", "smtp_password", payload.smtp_password)
     if payload.to_emails is not None:
-        config.to_emails = json.dumps(payload.to_emails)
+        set_system_setting(db, "email_smtp", "to_emails", json.dumps(payload.to_emails))
     if payload.schedule_time is not None:
-        config.schedule_time = payload.schedule_time
+        set_system_setting(db, "email_smtp", "schedule_time", payload.schedule_time)
     if payload.is_active is not None:
-        config.is_active = payload.is_active
+        set_system_setting(db, "email_smtp", "is_active", "true" if payload.is_active else "false")
         
-    db.commit()
-    db.refresh(config)
-    
     reschedule_report_job(db)
     
-    emails = json.loads(config.to_emails)
+    # Reload values
+    smtp_host = get_system_setting(db, "email_smtp", "smtp_host", "smtp.office365.com")
+    smtp_port_str = get_system_setting(db, "email_smtp", "smtp_port", "587")
+    smtp_user = get_system_setting(db, "email_smtp", "smtp_user", "")
+    smtp_password = get_system_setting(db, "email_smtp", "smtp_password", "")
+    to_emails_str = get_system_setting(db, "email_smtp", "to_emails", "[]")
+    schedule_time = get_system_setting(db, "email_smtp", "schedule_time", "20:00")
+    is_active_str = get_system_setting(db, "email_smtp", "is_active", "false")
+    
+    try:
+        smtp_port = int(smtp_port_str)
+    except Exception:
+        smtp_port = 587
+        
+    try:
+        emails = json.loads(to_emails_str)
+    except Exception:
+        emails = []
+        
+    is_active = (is_active_str.lower() == "true")
+        
     return EmailReportConfigOut(
-        id=config.id,
-        smtp_host=config.smtp_host,
-        smtp_port=config.smtp_port,
-        smtp_user=config.smtp_user,
+        id=1,
+        smtp_host=smtp_host,
+        smtp_port=smtp_port,
+        smtp_user=smtp_user,
         to_emails=emails,
-        schedule_time=config.schedule_time,
-        is_active=config.is_active,
-        has_password=bool(config.smtp_password),
-        created_at=config.created_at,
-        updated_at=config.updated_at
+        schedule_time=schedule_time,
+        is_active=is_active,
+        has_password=bool(smtp_password),
+        created_at=datetime.utcnow(),
+        updated_at=datetime.utcnow()
     )
 
 @router.get("/logs", response_model=list[EmailReportLogOut])

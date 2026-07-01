@@ -45,6 +45,8 @@ const blankForm = {
   address: "",
   notes: "",
   company_ids: "",
+  restrict_reporting: false,
+  crm_notification_email: "",
 };
 
 const tabs = [
@@ -217,6 +219,8 @@ function userFormData(form, parentId, avatarFile, removeImage) {
   data.append("is_active", String(form.is_active));
   data.append("remove_image", String(removeImage));
   data.append("company_ids", form.company_ids || "");
+  data.append("restrict_reporting", String(form.restrict_reporting));
+  data.append("crm_notification_email", form.crm_notification_email || "");
   if (form.password) data.append("password", form.password);
   if (avatarFile) data.append("profile_image", avatarFile);
   return data;
@@ -360,6 +364,8 @@ export function UsersPage() {
       is_active: user.is_active,
       joining_date: "2026-05-01",
       company_ids: user.company_ids || "",
+      restrict_reporting: !!user.restrict_reporting,
+      crm_notification_email: user.crm_notification_email || "",
     });
     setDirty(false);
     setAvatarPreview(assetUrl(user.profile_image_url) || "");
@@ -488,6 +494,8 @@ export function UsersPage() {
               <label>Password *<input type="password" required={!editingId} placeholder={editingId ? "Leave blank to keep password" : "Password"} value={form.password} onChange={(e) => setField("password", e.target.value)} /></label>
               <label>Role<select value={form.role_id} onChange={(e) => setField("role_id", e.target.value)}><option value="">No role</option>{roleOptions.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></label>
               <label>Senior / Parent User<select value={form.senior_id} onChange={(e) => setField("senior_id", e.target.value)}><option value="">Top Level</option>{parentOptions.map((user) => <option key={user.id} value={user.id}>{user.name} ({user.employee_id})</option>)}</select></label>
+              <label>CRM Notification Email ID<input type="email" placeholder="Optional notification email" value={form.crm_notification_email} onChange={(e) => setField("crm_notification_email", e.target.value)} /></label>
+              <label className="crm-toggle-row"><span>Restrict from Reporting</span><span className="status-control"><input type="checkbox" checked={form.restrict_reporting} onChange={(e) => setField("restrict_reporting", e.target.checked)} /><b>Restricted</b></span></label>
               <div style={{ gridColumn: "span 2" }}>
                 <label style={{ display: "block", marginBottom: "6px" }}>Assigned Companies</label>
                 <MultiSelect

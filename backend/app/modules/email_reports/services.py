@@ -10,7 +10,6 @@ from app.models import (
     UserTimeLog,
     LeaveRequest,
     OurCompany,
-    EmailReportConfig,
     EmailReportLog,
     Property
 )
@@ -109,7 +108,7 @@ def get_report_data(db: Session, target_date: date):
             "industry": industry,
             "connected_via": h.new_value or "Call",
             "response": h.remark or "No remark",
-            "last_activity_time": h.created_at.strftime("%I:%M %p"),
+            "last_activity_time": (h.created_at + timedelta(hours=5, minutes=30)).strftime("%I:%M %p"),
             "user_id": h.user_id,
             "user_name": user_name,
             "company_id": comp.id,
@@ -140,8 +139,8 @@ def get_report_data(db: Session, target_date: date):
         status = "⚫ Absent"
         
         if log:
-            login_str = log.login_at.strftime("%I:%M %p") if log.login_at else "—"
-            logout_str = log.logout_at.strftime("%I:%M %p") if log.logout_at else "—"
+            login_str = (log.login_at + timedelta(hours=5, minutes=30)).strftime("%I:%M %p") if log.login_at else "—"
+            logout_str = (log.logout_at + timedelta(hours=5, minutes=30)).strftime("%I:%M %p") if log.logout_at else "—"
             
             b_sec = log.total_break_seconds
             break_str = f"{b_sec // 60}m" if b_sec >= 60 else f"{b_sec}s"
@@ -507,7 +506,7 @@ def get_report_data(db: Session, target_date: date):
                 if assigned_at:
                     diff = datetime.now() - assigned_at
                     days_pending = max(1, diff.days)
-                    assigned_at_str = assigned_at.strftime("%d-%b %I:%M %p")
+                    assigned_at_str = (assigned_at + timedelta(hours=5, minutes=30)).strftime("%d-%b %I:%M %p")
                 else:
                     assigned_at_str = "—"
                     

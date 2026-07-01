@@ -239,5 +239,21 @@ export const api = {
   updateReportsConfig: (data) => request("/reports/config", { method: "PUT", body: JSON.stringify(data) }),
   reportsLogs: () => request("/reports/logs"),
   sendReportNow: (date) => request("/reports/send-now" + (date ? "?date=" + date : ""), { method: "POST" }),
-  downloadReportCsv: (date) => download("/reports/download" + (date ? "?date=" + date : ""), "Daily_Activity_Report_" + date + ".xlsx")
+  downloadReportCsv: (date) => download("/reports/download" + (date ? "?date=" + date : ""), "Daily_Activity_Report_" + date + ".xlsx"),
+  strictReportingConfig: () => request("/strict-reporting/config"),
+  updateStrictReportingConfig: (data) => request("/strict-reporting/config", { method: "PUT", body: JSON.stringify(data) }),
+  strictReportingStatus: () => request("/strict-reporting/status"),
+  submitDailyPlan: (tasks) => request("/strict-reporting/plan", { method: "POST", body: JSON.stringify(tasks) }),
+  todayDailyPlan: () => request("/strict-reporting/plan/today"),
+  previousUnfinishedTasks: () => request("/strict-reporting/plan/previous-unfinished"),
+  submitProgressReport: (data) => request("/strict-reporting/report", { method: "POST", body: JSON.stringify(data) }),
+  submitLogoutReport: (data) => request("/strict-reporting/logout-report", { method: "POST", body: JSON.stringify(data) }),
+  triggerAlertEmail: (alertType) => request(`/strict-reporting/trigger-alert-email?alert_type=${alertType}`, { method: "POST" }),
+  strictProgressReports: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.date) q.append("date", params.date);
+    if (params.user_id) q.append("user_id", params.user_id);
+    const qs = q.toString();
+    return request(`/strict-reporting/reports${qs ? `?${qs}` : ""}`);
+  }
 };

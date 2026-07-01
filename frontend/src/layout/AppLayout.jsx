@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { ChevronsLeft, ChevronRight, Clock, Coffee, LogOut, Play } from "lucide-react";
+import { ChevronsLeft, ChevronRight, Clock, Coffee, LogOut, Play, ClipboardList, Settings } from "lucide-react";
 import { api, assetUrl } from "../api";
 import salvinLogo from "../assets/salvin_logo.png";
 import { flatNavigation, navigation } from "../config/navigation";
@@ -31,8 +31,13 @@ import { LeaveCalendarPage } from "../pages/LeaveCalendarPage";
 import { EmployeeAttendancePage } from "../pages/EmployeeAttendancePage";
 import { ConnectionTrackingPage } from "../pages/ConnectionTrackingPage";
 import { ReportsPage } from "../pages/ReportsPage";
+import { StrictReportingManager } from "../components/StrictReportingManager";
+import { StrictReportingSettingsPage } from "../pages/StrictReportingSettingsPage";
+import { StrictComplianceLogsPage } from "../pages/StrictComplianceLogsPage";
 
 const pageMap = {
+  "strict-reporting-settings": StrictReportingSettingsPage,
+  "strict-compliance-logs": StrictComplianceLogsPage,
   "connection-tracking": ConnectionTrackingPage,
   "activity-reports": ReportsPage,
   dashboard: DashboardPage,
@@ -213,7 +218,7 @@ export function AppLayout({ page, setPage }) {
     : (timeLog?.status === "on_break" ? elapsedSinceFetch : 0);
   const workSeconds = liveTimeSeconds(timeLog, fetchTime) + (timeTick * 0);
 
-  const handleLogout = async () => {
+  const performActualLogout = async () => {
     try {
       const { has_pending } = await api.checkPendingReports();
       if (has_pending) {
@@ -229,6 +234,46 @@ export function AppLayout({ page, setPage }) {
     localStorage.removeItem("erp_current_page");
     logout();
   };
+
+  const handleLogout = () => {
+    window.dispatchEvent(new CustomEvent("erp:request_logout"));
+  };
+
+  // Handle PWA notification click messages and custom erp:navigate events
+  useEffect(() => {
+    // 1. Listen for PWA service worker window messages
+    if ('serviceWorker' in navigator) {
+      const handleSwMessage = (event) => {
+        if (event.data?.type === 'navigate' && event.data?.page) {
+          setPage(event.data.page);
+        }
+      };
+      navigator.serviceWorker.addEventListener('message', handleSwMessage);
+      return () => navigator.serviceWorker.removeEventListener('message', handleSwMessage);
+    }
+  }, []);
+
+  useEffect(() => {
+    // 2. Listen for custom window erp:navigate events
+    const handleNavigationEvent = (e) => {
+      if (e.detail?.page) {
+        setPage(e.detail.page);
+      }
+    };
+    window.addEventListener("erp:navigate", handleNavigationEvent);
+    return () => window.removeEventListener("erp:navigate", handleNavigationEvent);
+  }, []);
+
+  // 3. Check for page query parameter on mount (in case opened fresh from a new window link)
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const targetPage = params.get("page");
+    if (targetPage) {
+      setPage(targetPage);
+      // Clean query parameter from address bar
+      window.history.replaceState({}, document.title, window.location.pathname);
+    }
+  }, []);
 
   return (
     <div className={`app ${navCollapsed ? "nav-collapsed" : ""}`}>
@@ -302,6 +347,26 @@ export function AppLayout({ page, setPage }) {
                 <Coffee size={15} /> Go to Break
               </button>
             ) : null}
+            <button
+              type="button"
+              className="time-chip"
+              onClick={() => window.dispatchEvent(new CustomEvent("erp:open_plan_modal"))}
+              title="Today's Work Plan"
+              style={{ cursor: "pointer", marginRight: "6px" }}
+            >
+              <ClipboardList size={14} /> Today's Plan
+            </button>
+            {user?.permissions?.includes("reports.config") && (
+              <button
+                type="button"
+                className="time-chip"
+                onClick={() => setPage("strict-reporting-settings")}
+                title="Strict Reporting Settings"
+                style={{ cursor: "pointer", marginRight: "6px" }}
+              >
+                <Settings size={14} />
+              </button>
+            )}
             <NotificationBell
               onNavigate={(dest, paramId) => {
                 if (dest === "tasks") {
@@ -358,6 +423,7 @@ export function AppLayout({ page, setPage }) {
           </div>
         )}
         <GlobalChat />
+        <StrictReportingManager user={user} onLogout={performActualLogout} />
       </section>
       <style dangerouslySetInnerHTML={{
         __html: `

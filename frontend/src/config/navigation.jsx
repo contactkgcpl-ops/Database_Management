@@ -84,6 +84,8 @@ export const navigation = [
     children: [
       { key: "connection-tracking", label: "Connection Tracking", icon: ClipboardList, page: "connection-tracking", permission: "tracking.view" },
       { key: "activity-reports", label: "Activity Reports", icon: ClipboardList, page: "activity-reports", permission: "reports.view" },
+      { key: "strict-compliance-logs", label: "Strict Compliance Tracking", icon: ClipboardList, page: "strict-compliance-logs", permission: "reports.view" },
+      { key: "strict-reporting-settings", label: "Strict Reporting Settings", icon: Clock, page: "strict-reporting-settings", permission: "reports.config" },
     ],
   },
 ];

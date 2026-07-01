@@ -40,8 +40,11 @@ def send_outlook_email(smtp_host: str, smtp_port: int, smtp_user: str, smtp_pass
     msg.attach(part)
     
     print(f"Connecting to SMTP server {smtp_host}:{smtp_port}...")
-    server = smtplib.SMTP(smtp_host, smtp_port)
-    server.starttls()
+    if smtp_port == 465:
+        server = smtplib.SMTP_SSL(smtp_host, smtp_port)
+    else:
+        server = smtplib.SMTP(smtp_host, smtp_port)
+        server.starttls()
     print(f"Logging in to SMTP as {smtp_user}...")
     server.login(smtp_user, smtp_pass)
     

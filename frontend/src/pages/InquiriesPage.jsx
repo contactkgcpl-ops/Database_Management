@@ -582,6 +582,19 @@ export function InquiriesPage() {
                           uniqueValues = uniqueValues.filter(val => INQUIRY_STATUSES.includes(val));
                         }
 
+                        const propObj = properties.data?.find(p => p.field_key === col.key);
+                        const allOptions = propObj ? propertyOptions(propObj) : [];
+                        const optionsMap = new Map([
+                          ...allOptions.map(opt => [String(opt.value), opt.label]),
+                          ...pipelineStages.map(s => [String(s.key), s.label]),
+                          ["lost", "Lost"],
+                          ["not_interested", "Not Interested"]
+                        ]);
+                        const mappedOptions = uniqueValues.map(val => ({
+                          value: String(val),
+                          label: optionsMap.get(String(val)) || String(val)
+                        }));
+
                         return (
                           <th key={`${col.key}-f`} style={{ padding: "6px 8px" }}>
                             {col.key === "quick_connect" || col.key === "created_at" || col.key === "inquiry_no" || col.key === "follow_up_reminder_date" ? (
@@ -595,7 +608,7 @@ export function InquiriesPage() {
                             ) : col.key === "inquiry_source" || col.key === "status" ? (
                               <GridFilterDropdown
                                 label={col.label}
-                                options={uniqueValues}
+                                options={mappedOptions}
                                 value={columnFilters[col.key] || []}
                                 onChange={(val) => { setColumnFilters({ ...columnFilters, [col.key]: val }); setPage(1); }}
                                 isMulti={true}

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
+import { createPortal } from "react-dom";
 import { Search, X, Check, ChevronsUpDown } from "lucide-react";
 
 function initials(label = "") {
@@ -34,6 +35,7 @@ export function GridFilterDropdown({ label, options, value, onChange, isMulti, s
   const [isOpen, setIsOpen] = useState(false);
   const [search, setSearch] = useState("");
   const containerRef = useRef(null);
+  const dropdownRef = useRef(null);
 
   const [dropdownStyle, setDropdownStyle] = useState({});
   const [localValue, setLocalValue] = useState(value);
@@ -46,14 +48,17 @@ export function GridFilterDropdown({ label, options, value, onChange, isMulti, s
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      if (containerRef.current && !containerRef.current.contains(event.target)) {
+      const clickedDropdown = dropdownRef.current && dropdownRef.current.contains(event.target);
+      const clickedTrigger = containerRef.current && containerRef.current.contains(event.target);
+      if (!clickedTrigger && !clickedDropdown) {
         setIsOpen(false);
       }
     };
     
     const handleScroll = (e) => {
-      // Don't close if the scroll was inside the dropdown itself
+      // Don't close if the scroll was inside the dropdown itself or trigger
       if (containerRef.current && containerRef.current.contains(e.target)) return;
+      if (dropdownRef.current && dropdownRef.current.contains(e.target)) return;
       setIsOpen(false);
     };
 
@@ -130,6 +135,7 @@ export function GridFilterDropdown({ label, options, value, onChange, isMulti, s
               top: rect.bottom + 4 + 'px',
               left: rect.left + 'px',
               width: '180px',
+              right: 'auto',
               zIndex: 999999,
               background: '#fff',
               border: '1px solid #e2e8f0',
@@ -145,8 +151,8 @@ export function GridFilterDropdown({ label, options, value, onChange, isMulti, s
         <ChevronsUpDown size={14} className="arrow" />
       </button>
 
-      {isOpen && (
-        <div className="premium-dropdown grid-dropdown" style={dropdownStyle}>
+      {isOpen && createPortal(
+        <div className="premium-dropdown grid-dropdown" style={dropdownStyle} ref={dropdownRef}>
           <div className="premium-search-wrap">
             <Search size={14} className="muted" />
             <input 
@@ -220,7 +226,8 @@ export function GridFilterDropdown({ label, options, value, onChange, isMulti, s
               </button>
             </div>
           )}
-        </div>
+        </div>,
+        document.body
       )}
 
       <style dangerouslySetInnerHTML={{ __html: `
@@ -269,8 +276,19 @@ export function GridFilterDropdown({ label, options, value, onChange, isMulti, s
         }
         .grid-dropdown {
           width: 180px;
-          z-index: 9999;
-          box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -2px rgba(0,0,0,0.05);
+          z-index: 999999 !important;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15) !important;
+          border-radius: 6px !important;
+          background: #fff !important;
+        }
+        .grid-dropdown .premium-search-wrap {
+          padding: 6px 8px !important;
+        }
+        .grid-dropdown .premium-list {
+          max-height: 180px !important;
+        }
+        .grid-dropdown .premium-item {
+          padding: 6px 8px !important;
         }
         .premium-search-wrap {
           padding: 8px 12px;

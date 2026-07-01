@@ -17,7 +17,6 @@ let usersGlobal = [];
 const MY_LEADS_STATIC_COLUMNS = [
   { id: 0, name: "Lead / Company Name", field_key: "company_name", grids: [{ grid_key: "my_leads", grid_width: 200, grid_order: -100 }] },
   { id: -1, name: "Assigned By", field_key: "assigned_by_name", grids: [{ grid_key: "my_leads", grid_width: 160, grid_order: 900 }] },
-  { id: -3, name: "Call", field_key: "call_action", grids: [{ grid_key: "my_leads", grid_width: 80, grid_order: 920 }] },
 ];
 
 function getPropertyValue(record, property) {
@@ -71,6 +70,7 @@ export function MyLeadsPage({ setPage, setEditingId }) {
   const notify = useNotify();
   const { user } = useAuth();
   const canManage = user?.permissions?.includes("companies.manage");
+  const canEditLeads = user?.permissions?.includes("leads.my");
   const edit = (company) => {
     setEditingId(company.id);
     setPage("add-company");
@@ -500,12 +500,18 @@ export function MyLeadsPage({ setPage, setEditingId }) {
                       if (p.field_key === "status") {
                         uniqueValues = uniqueValues.filter(val => COLD_LEAD_STATUSES.includes(val));
                       }
+                      const allOptions = propertyOptions(p);
+                      const optionsMap = new Map(allOptions.map(opt => [String(opt.value), opt.label]));
+                      const mappedOptions = uniqueValues.map(val => ({
+                        value: String(val),
+                        label: optionsMap.get(String(val)) || String(val)
+                      }));
                       return (
                         <th key={`${p.field_key}-f`} style={{ width: `${getColumnWidth(p)}px`, minWidth: `${getColumnWidth(p)}px`, maxWidth: `${getColumnWidth(p)}px`, padding: "4px 8px" }}>
                           {p.field_key === "call_action" ? (
                             <div style={{ minHeight: "28px" }} />
                           ) : (p.field_key === "assigned_to" || p.field_key === "assigned_by_name" || p.filter_type === "dropdown" || p.filter_type === "multiselect") ? (
-                            <GridFilterDropdown label={p.name} options={uniqueValues} value={columnFilters[p.field_key] || []} onChange={(val) => setColumnFilters({ ...columnFilters, [p.field_key]: val })} isMulti={true} />
+                            <GridFilterDropdown label={p.name} options={mappedOptions} value={columnFilters[p.field_key] || []} onChange={(val) => setColumnFilters({ ...columnFilters, [p.field_key]: val })} isMulti={true} />
                           ) : (
                             <input className="filter-input" placeholder={`Filter ${p.name}`} value={columnFilters[p.field_key] || ""} onChange={(e) => setColumnFilters({ ...columnFilters, [p.field_key]: e.target.value })} />
                           )}

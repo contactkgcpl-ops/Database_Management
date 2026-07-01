@@ -28,7 +28,7 @@ export const navigation = [
     icon: Users,
     children: [
       { key: "my-leads", label: "datas", icon: Users, page: "my-leads", permission: "leads.my" },
-      { key: "today-followup", label: "my lead", icon: Building2, page: "today-followup", permission: "leads.followup" },
+      { key: "today-followup", label: "Follow up", icon: Building2, page: "today-followup", permission: "leads.followup" },
     ],
   },
   {

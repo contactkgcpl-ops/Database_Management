@@ -45,6 +45,7 @@ class UserCreate(BaseModel):
     parent_id: int | None = None
     profile_image_url: str | None = None
     is_active: bool = True
+    need_user_location: bool = False
 
 
 class UserUpdate(BaseModel):
@@ -55,6 +56,7 @@ class UserUpdate(BaseModel):
     parent_id: int | None = None
     profile_image_url: str | None = None
     is_active: bool | None = None
+    need_user_location: bool | None = None
 
 
 class UserOut(BaseModel):
@@ -71,6 +73,7 @@ class UserOut(BaseModel):
     company_ids: str | None = None
     restrict_reporting: bool = False
     crm_notification_email: str | None = None
+    need_user_location: bool = False
 
 
 class PropertyOptionBase(BaseModel):
@@ -304,6 +307,25 @@ class UserTimeLogOut(BaseModel):
     active_break_start: datetime | None = None
     breaks: list[UserBreakLogOut] = []
     server_time: datetime | None = None
+    
+    # Location
+    login_latitude: float | None = None
+    login_longitude: float | None = None
+    latitude: float | None = None
+    longitude: float | None = None
+    location_timestamp: datetime | None = None
+
+
+class UserLocationLogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    id: int
+    user_id: int
+    user_name: str | None = None
+    user_email: str | None = None
+    work_date: str
+    latitude: float
+    longitude: float
+    recorded_at: datetime
 
 
 # --- Hourly Reporting ---

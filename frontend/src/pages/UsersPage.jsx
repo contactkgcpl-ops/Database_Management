@@ -47,6 +47,7 @@ const blankForm = {
   company_ids: "",
   restrict_reporting: false,
   crm_notification_email: "",
+  need_user_location: false,
 };
 
 const tabs = [
@@ -221,6 +222,7 @@ function userFormData(form, parentId, avatarFile, removeImage) {
   data.append("company_ids", form.company_ids || "");
   data.append("restrict_reporting", String(form.restrict_reporting));
   data.append("crm_notification_email", form.crm_notification_email || "");
+  data.append("need_user_location", String(form.need_user_location));
   if (form.password) data.append("password", form.password);
   if (avatarFile) data.append("profile_image", avatarFile);
   return data;
@@ -366,6 +368,7 @@ export function UsersPage() {
       company_ids: user.company_ids || "",
       restrict_reporting: !!user.restrict_reporting,
       crm_notification_email: user.crm_notification_email || "",
+      need_user_location: !!user.need_user_location,
     });
     setDirty(false);
     setAvatarPreview(assetUrl(user.profile_image_url) || "");
@@ -496,6 +499,7 @@ export function UsersPage() {
               <label>Senior / Parent User<select value={form.senior_id} onChange={(e) => setField("senior_id", e.target.value)}><option value="">Top Level</option>{parentOptions.map((user) => <option key={user.id} value={user.id}>{user.name} ({user.employee_id})</option>)}</select></label>
               <label>CRM Notification Email ID<input type="email" placeholder="Optional notification email" value={form.crm_notification_email} onChange={(e) => setField("crm_notification_email", e.target.value)} /></label>
               <label className="crm-toggle-row"><span>Restrict from Reporting</span><span className="status-control"><input type="checkbox" checked={form.restrict_reporting} onChange={(e) => setField("restrict_reporting", e.target.checked)} /><b>Restricted</b></span></label>
+              <label className="crm-toggle-row"><span>Require Location Tracking</span><span className="status-control"><input type="checkbox" checked={form.need_user_location} onChange={(e) => setField("need_user_location", e.target.checked)} /><b>Required</b></span></label>
               <div style={{ gridColumn: "span 2" }}>
                 <label style={{ display: "block", marginBottom: "6px" }}>Assigned Companies</label>
                 <MultiSelect
@@ -570,7 +574,7 @@ export function UsersPage() {
                     <div className="user-grid-actions">
                       <button title="View" aria-label="View user" onClick={() => setDetailUser(user)}><Eye size={15} /></button>
                       <button title="Edit" aria-label="Edit user" onClick={() => openEdit(user)}><Pencil size={15} /></button>
-                      <button title={user.is_active ? "Deactivate" : "Activate"} aria-label={user.is_active ? "Deactivate user" : "Activate user"} className={user.is_active ? "danger" : "success"} onClick={async () => { const data = new FormData(); data.append("name", user.name); data.append("email", user.email); data.append("role_id", String(user.role_id || "")); data.append("parent_id", String(user.parent_id || "")); data.append("is_active", String(!user.is_active)); await api.updateUser(user.id, data); users.reload(); }}>
+                      <button title={user.is_active ? "Deactivate" : "Activate"} aria-label={user.is_active ? "Deactivate user" : "Activate user"} className={user.is_active ? "danger" : "success"} onClick={async () => { const data = new FormData(); data.append("name", user.name); data.append("email", user.email); data.append("role_id", String(user.role_id || "")); data.append("parent_id", String(user.parent_id || "")); data.append("is_active", String(!user.is_active)); data.append("company_ids", user.company_ids || ""); data.append("restrict_reporting", String(user.restrict_reporting)); data.append("crm_notification_email", user.crm_notification_email || ""); data.append("need_user_location", String(user.need_user_location)); await api.updateUser(user.id, data); users.reload(); }}>
                         {user.is_active ? <Trash2 size={15} /> : <ShieldCheck size={15} />}
                       </button>
                     </div>

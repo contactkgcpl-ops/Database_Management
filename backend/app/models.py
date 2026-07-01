@@ -58,6 +58,7 @@ class User(Base, TimestampMixin):
     company_ids: Mapped[str | None] = mapped_column(Text)
     restrict_reporting: Mapped[bool] = mapped_column(Boolean, default=False)
     crm_notification_email: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    need_user_location: Mapped[bool] = mapped_column(Boolean, default=False)
     role: Mapped[Role | None] = relationship(back_populates="users")
     parent: Mapped["User | None"] = relationship(remote_side=[id])
 
@@ -279,6 +280,13 @@ class UserTimeLog(Base, TimestampMixin):
     total_break_seconds: Mapped[int] = mapped_column(Integer, default=0)
     total_work_seconds: Mapped[int] = mapped_column(Integer, default=0)
     status: Mapped[str] = mapped_column(String(20), default="active")
+    
+    # Location tracking
+    login_latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    login_longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    longitude: Mapped[float | None] = mapped_column(Float, nullable=True)
+    location_timestamp: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
 
     user: Mapped[User] = relationship(foreign_keys=[user_id])
     breaks: Mapped[list["UserBreakLog"]] = relationship(
@@ -620,6 +628,19 @@ class SystemSetting(Base, TimestampMixin):
     setting_group: Mapped[str] = mapped_column(String(100), index=True)
     setting_key: Mapped[str] = mapped_column(String(100), unique=True, index=True)
     setting_value: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class UserLocationLog(Base, TimestampMixin):
+    __tablename__ = "user_location_logs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    work_date: Mapped[date] = mapped_column(Date, index=True)
+    latitude: Mapped[float] = mapped_column(Float)
+    longitude: Mapped[float] = mapped_column(Float)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    user: Mapped[User] = relationship(foreign_keys=[user_id])
 
 
 

@@ -74,44 +74,136 @@ export function StrictReportingManager({ user, onLogout }) {
     return () => window.removeEventListener("erp:open_plan_modal", handleOpenPlan);
   }, []);
 
-  // Periodic Status Checking (Every 30 seconds)
+  const getWsUrl = () => {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = window.location.host;
+    const token = localStorage.getItem("erp_token") || "";
+    return `${protocol}//${host}/api/chat/ws?token=${token}`;
+  };
+
+  // Helper to open/close plan/progress modals based on reporting status data
+  const applyModalVisibility = (data) => {
+    if (!data || data.restrict_reporting) return;
+
+    if (!data.plan_submitted && !data.is_on_break) {
+      setShowPlanModal(true);
+      setShowProgressModal(false);
+      handleAlerts(data.alert_level, "plan");
+    } else if (data.plan_submitted) {
+      setShowPlanModal(false);
+      const limit = data.config.report_interval_minutes;
+      if (data.minutes_since_last_report >= limit && !data.is_on_break) {
+        setShowProgressModal(true);
+        handleAlerts(data.alert_level, "report");
+      } else {
+        setShowProgressModal(false);
+      }
+    }
+  };
+
+  // 1. Initial Status Fetch & Offline Local Timer (ticks every 10 seconds locally)
   useEffect(() => {
     if (!user || user.restrict_reporting) return;
 
-    const checkStatus = async () => {
+    // Bootstrap initial status once on mount
+    const bootstrapStatus = async () => {
       try {
         const data = await api.strictReportingStatus();
         setStatus(data);
-
-        if (data.restrict_reporting) return;
-
-        // Today's Plan Checks
-        if (!data.plan_submitted && !data.is_on_break) {
-          setShowPlanModal(true);
-          setShowProgressModal(false);
-          
-          // Trigger Notifications & Emails
-          handleAlerts(data.alert_level, "plan");
-        } else if (data.plan_submitted) {
-          setShowPlanModal(false);
-          
-          // Work Progress Report Checks
-          const limit = data.config.report_interval_minutes;
-          if (data.minutes_since_last_report >= limit && !data.is_on_break) {
-            setShowProgressModal(true);
-            handleAlerts(data.alert_level, "report");
-          } else {
-            setShowProgressModal(false);
-          }
-        }
+        applyModalVisibility(data);
       } catch (err) {
-        console.error("Strict Reporting check failed:", err);
+        console.error("Initial strict status fetch failed:", err);
       }
     };
+    bootstrapStatus();
 
-    checkStatus();
-    const interval = setInterval(checkStatus, 30000);
+    // Local tick function to increment elapsed minutes offline
+    const interval = setInterval(() => {
+      setStatus((prev) => {
+        if (!prev || prev.restrict_reporting || prev.is_on_break) return prev;
+
+        // Increment local minutes by 1/6 (since it runs every 10 seconds)
+        const updatedMinLogin = prev.minutes_since_login + 1/6;
+        const updatedMinReport = prev.minutes_since_last_report + 1/6;
+
+        // Recompute alert level locally based on config limits
+        let newAlertLevel = 0;
+        if (!prev.plan_submitted) {
+          const limit = prev.config.plan_submission_limit_minutes;
+          if (updatedMinLogin < limit) newAlertLevel = 0;
+          else if (updatedMinLogin < limit + prev.config.alert_interval_1_minutes) newAlertLevel = 1;
+          else if (updatedMinLogin < limit + prev.config.alert_interval_2_minutes) newAlertLevel = 2;
+          else newAlertLevel = 3;
+        } else {
+          const limit = prev.config.report_interval_minutes;
+          const minutesOverdue = updatedMinReport - limit;
+          if (minutesOverdue <= 0) newAlertLevel = 0;
+          else if (minutesOverdue < prev.config.alert_interval_1_minutes) newAlertLevel = 1;
+          else if (minutesOverdue < prev.config.alert_interval_2_minutes) newAlertLevel = 2;
+          else newAlertLevel = 3;
+        }
+
+        const nextStatusObj = {
+          ...prev,
+          minutes_since_login: updatedMinLogin,
+          minutes_since_last_report: updatedMinReport,
+          alert_level: newAlertLevel
+        };
+
+        // Trigger updates and warnings offline
+        applyModalVisibility(nextStatusObj);
+        return nextStatusObj;
+      });
+    }, 10000);
+
     return () => clearInterval(interval);
+  }, [user]);
+
+  // 2. WebSocket listener to receive real-time status updates from server
+  useEffect(() => {
+    if (!user || user.restrict_reporting) return;
+
+    let socket = null;
+    let reconnectTimeout = null;
+    let isMounted = true;
+
+    const connectWebSocket = () => {
+      if (!isMounted) return;
+
+      const wsUrl = getWsUrl();
+      socket = new WebSocket(wsUrl);
+
+      socket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === "reporting_status") {
+            console.log("StrictReportingManager received real-time status via WebSocket:", data.payload);
+            setStatus(data.payload);
+            applyModalVisibility(data.payload);
+          }
+        } catch (err) {
+          console.error("Error parsing strict reporting WebSocket message:", err);
+        }
+      };
+
+      socket.onclose = () => {
+        if (isMounted) {
+          reconnectTimeout = setTimeout(connectWebSocket, 5000);
+        }
+      };
+
+      socket.onerror = () => {
+        socket.close();
+      };
+    };
+
+    connectWebSocket();
+
+    return () => {
+      isMounted = false;
+      if (socket) socket.close();
+      if (reconnectTimeout) clearTimeout(reconnectTimeout);
+    };
   }, [user]);
 
   // Fetch previous unfinished tasks on mount / plan modal open

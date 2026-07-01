@@ -25,6 +25,7 @@ def serialize_user(user: User) -> UserOut:
         company_ids=user.company_ids,
         restrict_reporting=bool(user.restrict_reporting),
         crm_notification_email=user.crm_notification_email,
+        need_user_location=bool(user.need_user_location),
     )
 
 

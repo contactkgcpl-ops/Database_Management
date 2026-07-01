@@ -1,5 +1,5 @@
-import React, { useEffect, useMemo, useState } from "react";
-import { ChevronsLeft, ChevronRight, Clock, Coffee, LogOut, Play, ClipboardList, Settings } from "lucide-react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
+import { ChevronsLeft, ChevronRight, Clock, Coffee, LogOut, Play, ClipboardList, Settings, MapPin, RefreshCw } from "lucide-react";
 import { api, assetUrl } from "../api";
 import salvinLogo from "../assets/salvin_logo.png";
 import { flatNavigation, navigation } from "../config/navigation";
@@ -96,6 +96,7 @@ export function AppLayout({ page, setPage }) {
   const [requirementDetailId, setRequirementDetailId] = useState(null);
 
   const navigateToPage = (newPage) => {
+    if (locationModalOpen) return;
     setTaskDetailId(null);
     setRequirementDetailId(null);
     setPage(newPage);
@@ -275,6 +276,118 @@ export function AppLayout({ page, setPage }) {
     }
   }, []);
 
+  // 4. Geolocation location tracking
+  const [locationModalOpen, setLocationModalOpen] = useState(false);
+  const [locationError, setLocationError] = useState("");
+  
+  const submittingLocationRef = useRef(false);
+  const lastCoordsRef = useRef({ latitude: null, longitude: null });
+
+  const haversineDistanceMeters = (lat1, lon1, lat2, lon2) => {
+    if (lat1 === null || lon1 === null || lat2 === null || lon2 === null) return Infinity;
+    const R = 6371000; // Earth radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLon = (lon2 - lon1) * Math.PI / 180;
+    const a = 
+      Math.sin(dLat/2) * Math.sin(dLat/2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
+  const submitLocationWithLock = (coords) => {
+    if (lastCoordsRef.current.latitude !== null) {
+      const distance = haversineDistanceMeters(
+        lastCoordsRef.current.latitude,
+        lastCoordsRef.current.longitude,
+        coords.latitude,
+        coords.longitude
+      );
+      // Only hit the API if user has moved more than 100 meters from last sent location
+      if (distance <= 100.0) {
+        return Promise.resolve();
+      }
+    }
+    
+    if (submittingLocationRef.current) return Promise.resolve();
+    submittingLocationRef.current = true;
+    lastCoordsRef.current = coords;
+    
+    return api.submitLocation(coords)
+      .finally(() => {
+        setTimeout(() => {
+          submittingLocationRef.current = false;
+        }, 5000);
+      });
+  };
+
+  const verifyLocation = () => {
+    setLocationError("");
+    if (!navigator.geolocation) {
+      setLocationError("Your browser does not support location tracking.");
+      return;
+    }
+    
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const { latitude, longitude } = position.coords;
+        api.submitLocation({ latitude, longitude })
+          .then(() => {
+            setLocationModalOpen(false);
+            setLocationError("");
+            lastCoordsRef.current = { latitude, longitude };
+          })
+          .catch((err) => {
+            console.error("Location tracking failed:", err);
+            setLocationError("Failed to register location on server. Please try again.");
+          });
+      },
+      (error) => {
+        console.warn("Geolocation request failed:", error);
+        if (error.code === error.PERMISSION_DENIED) {
+          setLocationError("Still Location is Off! Please turn on location access to continue.");
+        } else {
+          setLocationError("Could not retrieve your location. Make sure GPS/Location service is enabled on your device.");
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  };
+
+  useEffect(() => {
+    if (!user) return;
+    
+    if (!user.need_user_location) {
+      setLocationModalOpen(false);
+      setLocationError("");
+      return;
+    }
+    
+    setLocationModalOpen(true);
+    verifyLocation();
+    
+    let watchId = null;
+    if (navigator.geolocation) {
+      watchId = navigator.geolocation.watchPosition(
+        (position) => {
+          const { latitude, longitude } = position.coords;
+          submitLocationWithLock({ latitude, longitude }).catch(() => {});
+        },
+        (error) => {
+          console.warn("Geolocation watch failed:", error);
+        },
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
+      );
+    }
+    
+    return () => {
+      if (watchId !== null && navigator.geolocation) {
+        navigator.geolocation.clearWatch(watchId);
+      }
+    };
+  }, [user?.id]);
+
   return (
     <div className={`app ${navCollapsed ? "nav-collapsed" : ""}`}>
       <aside>
@@ -425,6 +538,57 @@ export function AppLayout({ page, setPage }) {
         <GlobalChat />
         <StrictReportingManager user={user} onLogout={performActualLogout} />
       </section>
+
+      {locationModalOpen && (
+        <div className="location-blocker-overlay">
+          <div className="location-blocker-panel">
+            <MapPin size={48} className="location-blocker-icon" />
+            <h1>Location Access Required</h1>
+            <p style={{ marginBottom: "16px" }}>This application requires location access to monitor compliance and clock-in attendance.</p>
+            
+            {locationError ? (
+              <div className="location-blocker-error-box">
+                <p className="error-title">⚠️ {locationError}</p>
+                <div className="location-blocker-steps">
+                  <p style={{ margin: "0 0 8px 0", fontWeight: "700", color: "#334155" }}>How to turn it on:</p>
+                  <ol>
+                    <li>Click the <b>Lock / Settings Icon</b> (🔒) in your browser address bar next to the CRM website link.</li>
+                    <li>Find the <b>Location</b> setting and switch it to <b>Allow</b>.</li>
+                    <li>Click <b>Verify & Continue</b> below.</li>
+                  </ol>
+                </div>
+              </div>
+            ) : (
+              <div style={{ padding: "16px", background: "#f0f9ff", borderRadius: "8px", border: "1px solid #bae6fd", color: "#0369a1", fontSize: "0.875rem", marginBottom: "20px", fontWeight: "500" }}>
+                ⏳ Requesting location permission from browser. Please click "Allow" on the browser popup prompt.
+              </div>
+            )}
+            
+            <button onClick={verifyLocation} style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
+              <RefreshCw size={15} /> Verify & Continue
+            </button>
+            
+            <button 
+              type="button" 
+              onClick={performActualLogout}
+              style={{
+                display: "block",
+                margin: "18px auto 0 auto",
+                background: "transparent",
+                color: "#dc2626",
+                border: "none",
+                fontSize: "0.875rem",
+                fontWeight: "700",
+                cursor: "pointer",
+                textDecoration: "underline",
+                padding: "4px 12px"
+              }}
+            >
+              Sign Out / Logout
+            </button>
+          </div>
+        </div>
+      )}
       <style dangerouslySetInnerHTML={{
         __html: `
         .time-chip, .break-button {
@@ -468,6 +632,104 @@ export function AppLayout({ page, setPage }) {
         }
         .break-panel h2 { margin: 0; font-size: 26px; color: #0f172a; }
         .break-panel p { margin: 0 0 8px; font-size: 42px; line-height: 1; font-weight: 900; color: #0f766e; font-variant-numeric: tabular-nums; }
+        
+        /* Location Blocker Overlay */
+        .location-blocker-overlay {
+          position: fixed;
+          inset: 0;
+          z-index: 99999999;
+          background: rgba(15, 23, 42, 0.45);
+          backdrop-filter: blur(4px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 24px;
+        }
+        .location-blocker-panel {
+          width: min(520px, 100%);
+          padding: 36px;
+          border-radius: 16px;
+          background: #ffffff;
+          box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+          text-align: center;
+          color: #1e293b;
+          border: 1px solid #e2e8f0;
+        }
+        .location-blocker-icon {
+          color: #ef4444;
+          margin-bottom: 20px;
+          animation: pulse-pin 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+        @keyframes pulse-pin {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: .5; transform: scale(1.1); }
+        }
+        .location-blocker-panel h1 {
+          margin: 0 0 12px 0;
+          font-size: 22px;
+          font-weight: 800;
+          color: #0f172a;
+        }
+        .location-blocker-panel p {
+          margin: 0 0 20px 0;
+          font-size: 14.5px;
+          color: #64748b;
+          line-height: 1.5;
+        }
+        .location-blocker-steps {
+          text-align: left;
+          background: #f8fafc;
+          border-radius: 10px;
+          padding: 20px;
+          margin-bottom: 24px;
+          border: 1px solid #f1f5f9;
+        }
+        .location-blocker-steps p {
+          margin: 0 0 10px 0;
+          color: #334155;
+          font-weight: 700;
+        }
+        .location-blocker-steps ol {
+          margin: 0;
+          padding-left: 20px;
+          color: #475569;
+          font-size: 13.5px;
+        }
+        .location-blocker-steps li {
+          margin-bottom: 8px;
+          line-height: 1.4;
+        }
+        .location-blocker-panel button {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          background: #176b5b;
+          color: #ffffff;
+          border: none;
+          padding: 12px 28px;
+          border-radius: 8px;
+          font-weight: 700;
+          font-size: 14px;
+          cursor: pointer;
+          transition: background 0.15s;
+        }
+        .location-blocker-panel button:hover {
+          background: #0f5446;
+        }
+        .location-blocker-error-box {
+          margin-bottom: 20px;
+        }
+        .error-title {
+          color: #dc2626 !important;
+          font-weight: 700 !important;
+          background: #fef2f2;
+          padding: 10px 14px;
+          border-radius: 8px;
+          border: 1px solid #fee2e2;
+          text-align: center;
+          font-size: 13.5px;
+          margin: 0 0 16px 0 !important;
+        }
       ` }} />
     </div>
   );

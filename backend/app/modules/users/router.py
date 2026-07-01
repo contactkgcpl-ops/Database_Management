@@ -104,6 +104,7 @@ async def parse_user_payload(request: Request, require_password: bool) -> tuple[
         "company_ids": str(data.get("company_ids") or "").strip() or None,
         "restrict_reporting": optional_bool(data.get("restrict_reporting"), False),
         "crm_notification_email": str(data.get("crm_notification_email") or "").strip() or None,
+        "need_user_location": optional_bool(data.get("need_user_location"), False),
     }
     password = str(data.get("password") or "")
     if require_password and len(password) < 6:
@@ -179,6 +180,7 @@ async def create_user(
         company_ids=payload["company_ids"],
         restrict_reporting=payload["restrict_reporting"],
         crm_notification_email=payload["crm_notification_email"],
+        need_user_location=payload["need_user_location"],
     )
     db.add(user)
     db.commit()
@@ -211,6 +213,7 @@ async def update_user(
     user.company_ids = payload["company_ids"]
     user.restrict_reporting = payload["restrict_reporting"]
     user.crm_notification_email = payload["crm_notification_email"]
+    user.need_user_location = payload["need_user_location"]
     if payload.get("password"):
         user.hashed_password = hash_password(payload["password"])
     db.commit()

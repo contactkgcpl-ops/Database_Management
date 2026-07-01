@@ -204,6 +204,11 @@ def to_time_log_out(log: UserTimeLog) -> UserTimeLogOut:
         active_break_start=add_utc_tz(active.break_start) if active else None,
         breaks=breaks,
         server_time=add_utc_tz(current_time),
+        login_latitude=log.login_latitude,
+        login_longitude=log.login_longitude,
+        latitude=log.latitude,
+        longitude=log.longitude,
+        location_timestamp=add_utc_tz(log.location_timestamp),
     )
 
 

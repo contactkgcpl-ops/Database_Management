@@ -611,6 +611,9 @@ def migrate_all(db: Session) -> None:
     migrate_strict_reporting(db)
     migrate_system_settings(db)
     migrate_progress_reports_late_tracking(db)
+    migrate_user_time_logs_location(db)
+    migrate_user_location_logs(db)
+    migrate_users_need_location(db)
 
 def migrate_system_settings(db: Session) -> None:
     inspector = inspect(engine)
@@ -725,5 +728,73 @@ def migrate_progress_reports_late_tracking(db: Session) -> None:
     if "reminders_sent" not in columns:
         db.execute(text("ALTER TABLE work_progress_reports ADD COLUMN reminders_sent INTEGER NOT NULL DEFAULT 0"))
     db.commit()
+
+
+def migrate_user_time_logs_location(db: Session) -> None:
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    if "user_time_logs" not in tables:
+        return
+    columns = {column["name"] for column in inspector.get_columns("user_time_logs")}
+    if "login_latitude" not in columns:
+        db.execute(text("ALTER TABLE user_time_logs ADD COLUMN login_latitude DOUBLE NULL"))
+    if "login_longitude" not in columns:
+        db.execute(text("ALTER TABLE user_time_logs ADD COLUMN login_longitude DOUBLE NULL"))
+    if "latitude" not in columns:
+        db.execute(text("ALTER TABLE user_time_logs ADD COLUMN latitude DOUBLE NULL"))
+    if "longitude" not in columns:
+        db.execute(text("ALTER TABLE user_time_logs ADD COLUMN longitude DOUBLE NULL"))
+    if "location_timestamp" not in columns:
+        db.execute(text("ALTER TABLE user_time_logs ADD COLUMN location_timestamp DATETIME NULL"))
+    db.commit()
+
+
+def migrate_user_location_logs(db: Session) -> None:
+    inspector = inspect(engine)
+    tables = set(inspector.get_table_names())
+    
+    if "user_location_logs" not in tables:
+        dialect = engine.dialect.name
+        if dialect == "mysql":
+            db.execute(text("""
+                CREATE TABLE user_location_logs (
+                    id INTEGER NOT NULL AUTO_INCREMENT PRIMARY KEY,
+                    user_id INTEGER NOT NULL,
+                    work_date DATE NOT NULL,
+                    latitude DOUBLE NOT NULL,
+                    longitude DOUBLE NOT NULL,
+                    recorded_at DATETIME,
+                    created_at DATETIME,
+                    updated_at DATETIME,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE,
+                    INDEX ix_user_location_logs_user_id (user_id),
+                    INDEX ix_user_location_logs_work_date (work_date)
+                )
+            """))
+        else:
+            db.execute(text("""
+                CREATE TABLE user_location_logs (
+                    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+                    user_id INTEGER NOT NULL,
+                    work_date DATE NOT NULL,
+                    latitude DOUBLE NOT NULL,
+                    longitude DOUBLE NOT NULL,
+                    recorded_at DATETIME,
+                    created_at DATETIME,
+                    updated_at DATETIME,
+                    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+                )
+            """))
+            db.execute(text("CREATE INDEX ix_user_location_logs_user_id ON user_location_logs (user_id)"))
+            db.execute(text("CREATE INDEX ix_user_location_logs_work_date ON user_location_logs (work_date)"))
+        db.commit()
+
+
+def migrate_users_need_location(db: Session) -> None:
+    inspector = inspect(engine)
+    columns = {column["name"] for column in inspector.get_columns("users")}
+    if "need_user_location" not in columns:
+        db.execute(text("ALTER TABLE users ADD COLUMN need_user_location BOOLEAN NOT NULL DEFAULT 0"))
+        db.commit()
 
 

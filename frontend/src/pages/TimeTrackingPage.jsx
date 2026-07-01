@@ -93,15 +93,16 @@ export function TimeTrackingPage({ mode = "my" }) {
                 <th>Break Time</th>
                 <th>Work Time</th>
                 <th>Status</th>
+                <th>Location</th>
               </tr>
             </thead>
             <tbody>
               {logs.loading ? (
-                <tr><td colSpan={isManage ? 7 : 6} style={{ padding: "30px", textAlign: "center", color: "#64748b" }}><Clock size={20} /> Loading time logs...</td></tr>
+                <tr><td colSpan={isManage ? 8 : 7} style={{ padding: "30px", textAlign: "center", color: "#64748b" }}><Clock size={20} /> Loading time logs...</td></tr>
               ) : logs.error ? (
-                <tr><td colSpan={isManage ? 7 : 6} style={{ padding: "30px", textAlign: "center", color: "#dc2626" }}><Search size={20} /> {logs.error}</td></tr>
+                <tr><td colSpan={isManage ? 8 : 7} style={{ padding: "30px", textAlign: "center", color: "#dc2626" }}><Search size={20} /> {logs.error}</td></tr>
               ) : logs.data.length === 0 ? (
-                <tr><td colSpan={isManage ? 7 : 6} style={{ padding: "30px", textAlign: "center", color: "#64748b" }}>No time logs found.</td></tr>
+                <tr><td colSpan={isManage ? 8 : 7} style={{ padding: "30px", textAlign: "center", color: "#64748b" }}>No time logs found.</td></tr>
               ) : (
                 logs.data.map((row) => (
                   <tr key={row.id}>
@@ -112,6 +113,22 @@ export function TimeTrackingPage({ mode = "my" }) {
                     <td><span className="cell-text">{secondsToLabel(row.total_break_seconds)}</span></td>
                     <td><span className="cell-text" style={{ fontWeight: "700" }}>{secondsToLabel(row.total_work_seconds)}</span></td>
                     <td><span className={`time-status ${row.status}`}>{row.status.replace("_", " ")}</span></td>
+                    <td>
+                      <span className="cell-text">
+                        {row.login_latitude && row.login_longitude ? (
+                          <a 
+                            href={`https://www.google.com/maps?q=${row.login_latitude},${row.login_longitude}`} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            style={{ color: "#176b5b", textDecoration: "underline", fontWeight: "700" }}
+                          >
+                            📍 View Map
+                          </a>
+                        ) : (
+                          <span style={{ color: "#94a3b8" }}>—</span>
+                        )}
+                      </span>
+                    </td>
                   </tr>
                 ))
               )}

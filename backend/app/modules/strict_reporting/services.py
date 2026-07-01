@@ -206,6 +206,20 @@ def submit_plan(db: Session, user: User, tasks: list[DailyWorkPlanCreate]) -> li
     db.commit()
     for plan in created_plans:
         db.refresh(plan)
+        
+    # Broadcast updated strict reporting status via WebSocket
+    try:
+        from fastapi.encoders import jsonable_encoder
+        from app.modules.chat.router import send_notification_to_user_sync
+        status_data = get_reporting_status(db, user)
+        send_notification_to_user_sync(user.id, {
+            "type": "reporting_status",
+            "payload": jsonable_encoder(status_data)
+        })
+    except Exception as e:
+        import logging
+        logging.getLogger("uvicorn").error(f"Error broadcasting status plan update: {e}")
+        
     return created_plans
 
 def get_today_plan(db: Session, user: User) -> list[DailyWorkPlan]:
@@ -262,6 +276,20 @@ def submit_progress_report(db: Session, user: User, payload: WorkProgressReportC
     db.add(report)
     db.commit()
     db.refresh(report)
+    
+    # Broadcast updated strict reporting status via WebSocket
+    try:
+        from fastapi.encoders import jsonable_encoder
+        from app.modules.chat.router import send_notification_to_user_sync
+        status_data = get_reporting_status(db, user)
+        send_notification_to_user_sync(user.id, {
+            "type": "reporting_status",
+            "payload": jsonable_encoder(status_data)
+        })
+    except Exception as e:
+        import logging
+        logging.getLogger("uvicorn").error(f"Error broadcasting status report update: {e}")
+        
     return report
 
 def submit_logout_report(db: Session, user: User, payload: LogoutReportSubmit) -> bool:
@@ -275,6 +303,20 @@ def submit_logout_report(db: Session, user: User, payload: LogoutReportSubmit) -
             if task_status.status == "ongoing":
                 task.ongoing_remark = task_status.ongoing_remark
     db.commit()
+    
+    # Broadcast updated strict reporting status via WebSocket
+    try:
+        from fastapi.encoders import jsonable_encoder
+        from app.modules.chat.router import send_notification_to_user_sync
+        status_data = get_reporting_status(db, user)
+        send_notification_to_user_sync(user.id, {
+            "type": "reporting_status",
+            "payload": jsonable_encoder(status_data)
+        })
+    except Exception as e:
+        import logging
+        logging.getLogger("uvicorn").error(f"Error broadcasting status logout update: {e}")
+        
     return True
 
 def send_custom_email(db: Session, to_emails: list[str], cc_emails: list[str], subject: str, html_body: str):

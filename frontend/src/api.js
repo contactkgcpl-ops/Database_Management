@@ -255,5 +255,13 @@ export const api = {
     if (params.user_id) q.append("user_id", params.user_id);
     const qs = q.toString();
     return request(`/strict-reporting/reports${qs ? `?${qs}` : ""}`);
+  },
+  submitLocation: (coords) => request("/time/location", { method: "POST", body: JSON.stringify(coords) }),
+  locationHistory: (params = {}) => {
+    const q = new URLSearchParams();
+    if (params.date) q.append("date", params.date);
+    if (params.user_id) q.append("user_id", params.user_id);
+    const qs = q.toString();
+    return request(`/time/location-history${qs ? `?${qs}` : ""}`);
   }
 };

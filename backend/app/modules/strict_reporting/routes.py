@@ -107,7 +107,7 @@ def get_all_reports_endpoint(
     if user_id:
         query = query.filter(WorkProgressReport.user_id == user_id)
         
-    reports = query.order_by(WorkProgressReport.reported_at.desc()).all()
+    reports = query.order_by(User.name.asc(), WorkProgressReport.reported_at.asc()).all()
     
     results = []
     for r in reports:

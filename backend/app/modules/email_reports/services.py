@@ -505,7 +505,7 @@ def get_report_data(db: Session, target_date: date):
                     assigned_at = c.created_at
                     
                 if assigned_at:
-                    diff = datetime.now() - assigned_at
+                    diff = datetime.utcnow() - assigned_at
                     days_pending = max(1, diff.days)
                     assigned_at_str = (assigned_at + timedelta(hours=5, minutes=30)).strftime("%d-%b %I:%M %p")
                 else:

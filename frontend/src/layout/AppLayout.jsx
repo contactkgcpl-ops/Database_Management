@@ -279,6 +279,7 @@ export function AppLayout({ page, setPage }) {
   // 4. Geolocation location tracking
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [locationError, setLocationError] = useState("");
+  const [verifying, setVerifying] = useState(false);
   
   const submittingLocationRef = useRef(false);
   const lastCoordsRef = useRef({ latitude: null, longitude: null });
@@ -323,9 +324,12 @@ export function AppLayout({ page, setPage }) {
   };
 
   const verifyLocation = () => {
+    if (verifying) return;
+    setVerifying(true);
     setLocationError("");
     if (!navigator.geolocation) {
       setLocationError("Your browser does not support location tracking.");
+      setVerifying(false);
       return;
     }
     
@@ -341,6 +345,9 @@ export function AppLayout({ page, setPage }) {
           .catch((err) => {
             console.error("Location tracking failed:", err);
             setLocationError("Failed to register location on server. Please try again.");
+          })
+          .finally(() => {
+            setVerifying(false);
           });
       },
       (error) => {
@@ -350,6 +357,7 @@ export function AppLayout({ page, setPage }) {
         } else {
           setLocationError("Could not retrieve your location. Make sure GPS/Location service is enabled on your device.");
         }
+        setVerifying(false);
       },
       { enableHighAccuracy: true, timeout: 10000 }
     );
@@ -564,8 +572,24 @@ export function AppLayout({ page, setPage }) {
               </div>
             )}
             
-            <button onClick={verifyLocation} style={{ display: "inline-flex", alignItems: "center", gap: "8px" }}>
-              <RefreshCw size={15} /> Verify & Continue
+            <button 
+              onClick={verifyLocation} 
+              disabled={verifying}
+              style={{ 
+                display: "inline-flex", 
+                alignItems: "center", 
+                gap: "8px", 
+                opacity: verifying ? 0.6 : 1, 
+                cursor: verifying ? "not-allowed" : "pointer" 
+              }}
+            >
+              <RefreshCw 
+                size={15} 
+                style={{ 
+                  animation: verifying ? "spin 1s linear infinite" : "none" 
+                }} 
+              /> 
+              {verifying ? "Verifying..." : "Verify & Continue"}
             </button>
             
             <button 
@@ -715,6 +739,10 @@ export function AppLayout({ page, setPage }) {
         }
         .location-blocker-panel button:hover {
           background: #0f5446;
+        }
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
         }
         .location-blocker-error-box {
           margin-bottom: 20px;

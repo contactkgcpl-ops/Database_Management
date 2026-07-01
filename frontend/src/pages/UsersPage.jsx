@@ -72,6 +72,8 @@ const columnDefs = [
   ["senior", "Senior / Parent User"],
   ["team", "Team Members Under Them"],
   ["company_ids", "Assigned Companies"],
+  ["need_user_location", "Require Location Tracking"],
+  ["restrict_reporting", "Restrict from Reporting"],
   ["last_login", "Last Login"],
   ["status", "Status"],
 ];
@@ -451,6 +453,20 @@ export function UsersPage() {
     }
     if (key === "role") return <span className="crm-role-chip">{user.role_name}</span>;
     if (key === "status") return <span className={`crm-status ${user.status.toLowerCase()}`}>{user.status}</span>;
+    if (key === "need_user_location") {
+      return user.need_user_location ? (
+        <span className="crm-pill green" style={{ fontWeight: "700", background: "#ecfdf5", color: "#047857", border: "1px solid #a7f3d0", padding: "4px 8px", borderRadius: "6px", fontSize: "11px" }}>Yes / Required</span>
+      ) : (
+        <span className="crm-pill gray" style={{ color: "#64748b", background: "#f1f5f9", border: "1px solid #e2e8f0", padding: "4px 8px", borderRadius: "6px", fontSize: "11px" }}>No</span>
+      );
+    }
+    if (key === "restrict_reporting") {
+      return user.restrict_reporting ? (
+        <span className="crm-pill red" style={{ fontWeight: "700", background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", padding: "4px 8px", borderRadius: "6px", fontSize: "11px" }}>Yes / Restricted</span>
+      ) : (
+        <span className="crm-pill gray" style={{ color: "#64748b", background: "#f1f5f9", border: "1px solid #e2e8f0", padding: "4px 8px", borderRadius: "6px", fontSize: "11px" }}>No</span>
+      );
+    }
     if (key === "company_ids") {
       if (!user.company_ids) return <span className="muted">-</span>;
       const ids = user.company_ids.split(",");
@@ -550,6 +566,8 @@ export function UsersPage() {
                 <th>Senior / Parent User</th>
                 <th>Team Members Under Them</th>
                 <th>Assigned Companies</th>
+                <th>Require Location Tracking</th>
+                <th>Restrict from Reporting</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -569,6 +587,8 @@ export function UsersPage() {
                   <td><div className="user-parent-cell"><strong>{user.senior_name}</strong><small>{user.senior_id_text || "Top Level"}</small></div></td>
                   <td>{renderCell(user, "team")}</td>
                   <td>{renderCell(user, "company_ids")}</td>
+                  <td>{renderCell(user, "need_user_location")}</td>
+                  <td>{renderCell(user, "restrict_reporting")}</td>
                   <td>{renderCell(user, "status")}</td>
                   <td>
                     <div className="user-grid-actions">

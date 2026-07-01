@@ -751,6 +751,34 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
                                   }}
                                   placeholder="Select Assignee"
                                 />
+                              ) : p.field_key === "verification_status" ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <select
+                                    className="inline-select"
+                                    style={{
+                                      flex: 1,
+                                      padding: "4px",
+                                      border: "1px solid #e2e8f0",
+                                      borderRadius: "4px",
+                                      fontSize: "12px",
+                                      cursor: "pointer",
+                                      ...getVerificationStatusStyle(currentVal)
+                                    }}
+                                    value={currentVal || ""}
+                                    disabled={!canManage}
+                                    onChange={(e) => handleInlineEdit(c.id, p, e.target.value)}
+                                  >
+                                    <option value="">-</option>
+                                    {p.options?.map(o => (
+                                      <option key={o.value} value={o.value}>{o.label}</option>
+                                    ))}
+                                  </select>
+                                  {c.history_keys?.includes(p.field_key) && (
+                                    <button type="button" className="cell-icon-button" onClick={() => openHistory(c.id, p.field_key)} title={`View ${p.name} History`} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
+                                      <History size={14} style={{ color: "#64748b" }} />
+                                    </button>
+                                  )}
+                                </div>
                               ) : isEditing ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '2px' }}>
                                   {p.field_key === "state" ? (

@@ -189,7 +189,7 @@ def get_report_data(db: Session, target_date: date):
         for u in users:
             assigned_leads = [
                 c for c in oc_companies 
-                if lead_manage_map.get(c.id) and lead_manage_map[c.id].assigned_to_id == u.id
+                if lead_manage_map.get(c.id) and u.id in get_assigned_user_ids(lead_manage_map[c.id])
             ]
             if not assigned_leads:
                 continue
@@ -379,43 +379,44 @@ def get_report_data(db: Session, target_date: date):
             for c in companies:
                 raw_comp = company_dynamic_map.get(c.id)
                 comp_val = raw_comp["company"] if raw_comp else None
-                if oc_id in get_linked_oc_ids(comp_val) \
-                   and lead_manage_map.get(c.id) \
-                   and lead_manage_map[c.id].assigned_to_id in subordinate_ids:
-                    oc_companies.append(c)
+                if oc_id in get_linked_oc_ids(comp_val) and lead_manage_map.get(c.id):
+                    assigned_ids = get_assigned_user_ids(lead_manage_map[c.id])
+                    sub_assigned_ids = [uid for uid in assigned_ids if uid in subordinate_ids]
+                    if sub_assigned_ids:
+                        oc_companies.append((c, sub_assigned_ids))
 
-            for comp in oc_companies:
+            for comp, sub_assigned_ids in oc_companies:
                 lm = lead_manage_map.get(comp.id)
-                assigned_uid = lm.assigned_to_id if lm else None
-                assignee = users_map.get(assigned_uid) if assigned_uid else None
+                for assigned_uid in sub_assigned_ids:
+                    assignee = users_map.get(assigned_uid)
 
-                # City / Industry for this company
-                raw_comp = company_dynamic_map.get(comp.id)
-                city = (raw_comp["city"] if raw_comp and raw_comp["city"] is not None else "") or "Unknown"
-                industry = (raw_comp["industries"] if raw_comp and raw_comp["industries"] is not None else "") or "Unknown"
+                    # City / Industry for this company
+                    raw_comp = company_dynamic_map.get(comp.id)
+                    city = (raw_comp["city"] if raw_comp and raw_comp["city"] is not None else "") or "Unknown"
+                    industry = (raw_comp["industries"] if raw_comp and raw_comp["industries"] is not None else "") or "Unknown"
 
-                # Get all activities for this company by the assignee
-                comp_activities = [a for a in company_activities if a["company_id"] == comp.id and a["user_id"] == assigned_uid] if assigned_uid else []
-                worked = 1 if comp_activities else 0
-                calls = sum(1 for a in comp_activities if "call" in a["comm_type"])
-                wa = sum(1 for a in comp_activities if "whatsapp" in a["comm_type"])
-                email = sum(1 for a in comp_activities if "email" in a["comm_type"])
-                social = sum(1 for a in comp_activities if "social" in a["comm_type"])
+                    # Get all activities for this company by the assignee
+                    comp_activities_assignee = [a for a in company_activities if a["company_id"] == comp.id and a["user_id"] == assigned_uid]
+                    worked = 1 if comp_activities_assignee else 0
+                    calls = sum(1 for a in comp_activities_assignee if "call" in a["comm_type"])
+                    wa = sum(1 for a in comp_activities_assignee if "whatsapp" in a["comm_type"])
+                    email = sum(1 for a in comp_activities_assignee if "email" in a["comm_type"])
+                    social = sum(1 for a in comp_activities_assignee if "social" in a["comm_type"])
 
-                user_company_tracking.append({
-                    "user_name": u.name,
-                    "our_company": oc_name,
-                    "city": city,
-                    "industry": industry,
-                    "assignee": assignee.name if assignee else "—",
-                    "assigned": 1,
-                    "worked": worked,
-                    "pending": 1 - worked,
-                    "calls": calls,
-                    "whatsapp": wa,
-                    "email": email,
-                    "social": social
-                })
+                    user_company_tracking.append({
+                        "user_name": u.name,
+                        "our_company": oc_name,
+                        "city": city,
+                        "industry": industry,
+                        "assignee": assignee.name if assignee else "—",
+                        "assigned": 1,
+                        "worked": worked,
+                        "pending": 1 - worked,
+                        "calls": calls,
+                        "whatsapp": wa,
+                        "email": email,
+                        "social": social
+                    })
 
     # ─────────────────────────────────────────────────────────────────
     # 12. Per-User Detailed Reports (Sheets 2+)
@@ -424,7 +425,7 @@ def get_report_data(db: Session, target_date: date):
     for u in users:
         assigned_leads = [
             c for c in companies 
-            if lead_manage_map.get(c.id) and lead_manage_map[c.id].assigned_to_id == u.id
+            if lead_manage_map.get(c.id) and u.id in get_assigned_user_ids(lead_manage_map[c.id])
         ]
         if not assigned_leads:
             continue

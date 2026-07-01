@@ -135,7 +135,7 @@ export function AppLayout({ page, setPage }) {
         .catch(() => { });
     };
     loadToday();
-    
+
     // Poll every 5 minutes instead of every 30 seconds
     const refreshId = window.setInterval(loadToday, 300000);
     const tickId = window.setInterval(() => setTimeTick((current) => current + 1), 1000);
@@ -280,7 +280,7 @@ export function AppLayout({ page, setPage }) {
   const [locationModalOpen, setLocationModalOpen] = useState(false);
   const [locationError, setLocationError] = useState("");
   const [verifying, setVerifying] = useState(false);
-  
+
   const submittingLocationRef = useRef(false);
   const lastCoordsRef = useRef({ latitude: null, longitude: null });
 
@@ -289,11 +289,11 @@ export function AppLayout({ page, setPage }) {
     const R = 6371000; // Earth radius in meters
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2);
-    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   };
 
@@ -310,11 +310,11 @@ export function AppLayout({ page, setPage }) {
         return Promise.resolve();
       }
     }
-    
+
     if (submittingLocationRef.current) return Promise.resolve();
     submittingLocationRef.current = true;
     lastCoordsRef.current = coords;
-    
+
     return api.submitLocation(coords)
       .finally(() => {
         setTimeout(() => {
@@ -332,7 +332,7 @@ export function AppLayout({ page, setPage }) {
       setVerifying(false);
       return;
     }
-    
+
     navigator.geolocation.getCurrentPosition(
       (position) => {
         const { latitude, longitude } = position.coords;
@@ -365,22 +365,22 @@ export function AppLayout({ page, setPage }) {
 
   useEffect(() => {
     if (!user) return;
-    
+
     if (!user.need_user_location) {
       setLocationModalOpen(false);
       setLocationError("");
       return;
     }
-    
+
     setLocationModalOpen(true);
     verifyLocation();
-    
+
     let watchId = null;
     if (navigator.geolocation) {
       watchId = navigator.geolocation.watchPosition(
         (position) => {
           const { latitude, longitude } = position.coords;
-          submitLocationWithLock({ latitude, longitude }).catch(() => {});
+          submitLocationWithLock({ latitude, longitude }).catch(() => { });
         },
         (error) => {
           console.warn("Geolocation watch failed:", error);
@@ -388,7 +388,7 @@ export function AppLayout({ page, setPage }) {
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
       );
     }
-    
+
     return () => {
       if (watchId !== null && navigator.geolocation) {
         navigator.geolocation.clearWatch(watchId);
@@ -553,7 +553,7 @@ export function AppLayout({ page, setPage }) {
             <MapPin size={48} className="location-blocker-icon" />
             <h1>Location Access Required</h1>
             <p style={{ marginBottom: "16px" }}>This application requires location access to monitor compliance and clock-in attendance.</p>
-            
+
             {locationError ? (
               <div className="location-blocker-error-box">
                 <p className="error-title">⚠️ {locationError}</p>
@@ -571,29 +571,29 @@ export function AppLayout({ page, setPage }) {
                 ⏳ Requesting location permission from browser. Please click "Allow" on the browser popup prompt.
               </div>
             )}
-            
-            <button 
-              onClick={verifyLocation} 
+
+            <button
+              onClick={verifyLocation}
               disabled={verifying}
-              style={{ 
-                display: "inline-flex", 
-                alignItems: "center", 
-                gap: "8px", 
-                opacity: verifying ? 0.6 : 1, 
-                cursor: verifying ? "not-allowed" : "pointer" 
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: "8px",
+                opacity: verifying ? 0.6 : 1,
+                cursor: verifying ? "not-allowed" : "pointer"
               }}
             >
-              <RefreshCw 
-                size={15} 
-                style={{ 
-                  animation: verifying ? "spin 1s linear infinite" : "none" 
-                }} 
-              /> 
+              <RefreshCw
+                size={15}
+                style={{
+                  animation: verifying ? "spin 1s linear infinite" : "none"
+                }}
+              />
               {verifying ? "Verifying..." : "Verify & Continue"}
             </button>
-            
-            <button 
-              type="button" 
+
+            <button
+              type="button"
               onClick={performActualLogout}
               style={{
                 display: "block",

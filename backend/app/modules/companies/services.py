@@ -580,33 +580,49 @@ def update_company(db: Session, company: Company, payload: CompanyUpdate) -> Com
 
 def assign_company(db: Session, company: Company, user_id: int | None, assigned_by_id: int | None = None, lead_data: dict | None = None) -> Company:
     assignment = db.query(LeadManage).filter(LeadManage.company_id == company.id).first()
-    old_assigned_to = assignment.assigned_to_id if assignment else None
     
     if not assignment:
         assignment = LeadManage(company_id=company.id)
         db.add(assignment)
+        db.flush()
+
+    old_assigned_to = assignment.assigned_to_id
     
-    if assignment.assigned_to_id != user_id:
-        assignment.assigned_to_id = user_id
-        # Sync assigned_to_ids — keep any existing extra IDs, ensure new primary is first
-        existing_ids = []
-        if assignment.assigned_to_ids:
-            for part in str(assignment.assigned_to_ids).split(","):
-                part = part.strip()
-                if part:
-                    try:
-                        existing_ids.append(int(part))
-                    except ValueError:
-                        pass
-        if user_id is not None and user_id not in existing_ids:
-            existing_ids = [user_id] + existing_ids
-        elif user_id is None:
-            existing_ids = []
-        assignment.assigned_to_ids = ",".join(str(i) for i in existing_ids) if existing_ids else None
+    # Parse existing assigned_to_ids
+    existing_ids = []
+    if assignment.assigned_to_ids:
+        for part in str(assignment.assigned_to_ids).split(","):
+            part = part.strip()
+            if part:
+                try:
+                    existing_ids.append(int(part))
+                except ValueError:
+                    pass
+    
+    old_existing_ids = list(existing_ids)
+    
+    changed = False
+    if user_id is None:
+        if old_existing_ids:
+            assignment.assigned_to_id = None
+            assignment.assigned_to_ids = None
+            changed = True
+    else:
+        if user_id not in existing_ids:
+            existing_ids.append(user_id)
+            changed = True
+        
+        # Ensure a primary assignee is set if it was None or got removed
+        if assignment.assigned_to_id is None or assignment.assigned_to_id not in existing_ids:
+            assignment.assigned_to_id = existing_ids[0] if existing_ids else user_id
+            changed = True
+            
+        assignment.assigned_to_ids = ",".join(str(i) for i in existing_ids)
+
+    if changed:
         if assigned_by_id:
             assignment.assigned_by_id = assigned_by_id
 
-        
         # Add history for assignment change
         old_user_name = ""
         if old_assigned_to:
@@ -633,12 +649,31 @@ def assign_company(db: Session, company: Company, user_id: int | None, assigned_
         )
         db.add(history)
         
+        # 1. Sync dynamic property values in company.property_values relationship
+        from app.models import Property, CompanyPropertyValue
+        prop = db.query(Property).filter(Property.field_key == "company", Property.is_active == True).first()
+        if prop:
+            # Filter out old company property values
+            company.property_values = [pv for pv in company.property_values if pv.property_id != prop.id]
+            # Add updated values
+            if assignment.assigned_to_ids:
+                for uid in assignment.assigned_to_ids.split(","):
+                    val = uid.strip()
+                    if val:
+                        company.property_values.append(CompanyPropertyValue(property_id=prop.id, value=val))
+        
+        # 2. Update the company column in companies table
+        db.execute(
+            text("UPDATE companies SET company = :val WHERE id = :cid"),
+            {"val": assignment.assigned_to_ids or "unassigned", "cid": company.id}
+        )
+        
     # Update any pending/re-follow-up records to ensure they match the assignee
     from app.models import LeadFollowUp
     db.query(LeadFollowUp).filter(
         LeadFollowUp.company_id == company.id,
         LeadFollowUp.status.in_(["Pending", "Re Follow Up"])
-    ).update({"assigned_to_id": user_id}, synchronize_session=False)
+    ).update({"assigned_to_id": assignment.assigned_to_id}, synchronize_session=False)
     
     db.commit()
 

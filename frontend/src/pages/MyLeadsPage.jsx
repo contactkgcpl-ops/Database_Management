@@ -534,164 +534,70 @@ export function MyLeadsPage({ setPage, setEditingId }) {
                     }
                     return (
                       <tr key={lead.id} className={rowClassName}>
-                      {bulkMode && (
-                        <td className="bulk-select-col">
-                          <input
-                            type="checkbox"
-                            checked={selectedLeadIdSet.has(Number(lead.id))}
-                            onChange={() => toggleLeadSelection(lead.id)}
-                            aria-label={`Select ${lead.company_name}`}
-                          />
-                        </td>
-                      )}
-                      {gridProperties.map((p) => {
-                        const isEditing = editingCell?.leadId === lead.id && editingCell?.fieldKey === p.field_key;
-                        return (
-                          <td 
-                            key={p.field_key} 
-                            style={{ 
-                              width: `${getColumnWidth(p)}px`, 
-                              minWidth: `${getColumnWidth(p)}px`, 
-                              maxWidth: `${getColumnWidth(p)}px`,
-                              overflow: isEditing ? 'visible' : 'hidden', 
-                              position: 'relative', 
-                              zIndex: isEditing ? 100 : 10 
-                            }}
-                            onDoubleClick={() => {
-                              if (p.field_key !== "call_action" && p.field_key !== "assigned_by_name" && p.field_key !== "status" && p.field_key !== "client_replay" && p.field_key !== "connected_source" && !isMultiSelectProperty(p) && p.object_type !== "dropdown" && (canManage || canEditLeads)) {
-                                setEditingCell({ leadId: lead.id, fieldKey: p.field_key, value: getPropertyValue(lead, p) });
-                              }
-                            }}
-                          >
-                            {isEditing ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '2px' }}>
-                                {p.object_type === "textarea" ? (
-                                  <textarea
-                                    style={{
-                                      width: "100%",
-                                      padding: "4px",
-                                      border: "1px solid #e2e8f0",
-                                      borderRadius: "4px",
-                                      fontSize: "12px"
-                                    }}
-                                    rows={2}
-                                    value={editingCell.value || ""}
-                                    onChange={(e) => setEditingCell(prev => ({ ...prev, value: e.target.value }))}
-                                  />
-                                ) : (
-                                  <input
-                                    style={{
-                                      width: "100%",
-                                      padding: "4px",
-                                      border: "1px solid #e2e8f0",
-                                      borderRadius: "4px",
-                                      fontSize: "12px"
-                                    }}
-                                    type={p.object_type === "number" ? "number" : p.object_type === "date" ? "date" : "text"}
-                                    value={editingCell.value || ""}
-                                    onChange={(e) => setEditingCell(prev => ({ ...prev, value: e.target.value }))}
-                                  />
-                                )}
-                                <div style={{ display: 'flex', gap: '4px' }}>
-                                  <button
-                                    type="button"
-                                    onClick={async () => {
-                                      await handleInlineEdit(lead.id, p, editingCell.value);
-                                      setEditingCell(null);
-                                    }}
-                                    style={{
-                                      padding: "2px 8px",
-                                      backgroundColor: "#176b5b",
-                                      color: "#fff",
-                                      border: "none",
-                                      borderRadius: "4px",
-                                      fontSize: "11px",
-                                      fontWeight: "600",
-                                      cursor: "pointer"
-                                    }}
-                                  >
-                                    Save
-                                  </button>
-                                  <button
-                                    type="button"
-                                    onClick={() => setEditingCell(null)}
-                                    style={{
-                                      padding: "2px 8px",
-                                      backgroundColor: "#ef4444",
-                                      color: "#fff",
-                                      border: "none",
-                                      borderRadius: "4px",
-                                      fontSize: "11px",
-                                      fontWeight: "600",
-                                      cursor: "pointer"
-                                    }}
-                                  >
-                                    Cancel
-                                  </button>
-                                </div>
-                              </div>
-                            ) : p.field_key === "call_action" ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
-                                <button
-                                  className="cell-icon-button call-action-btn"
-                                  style={{
-                                    backgroundColor: "#d1fae5",
-                                    color: "#065f46",
-                                    border: "1px solid #a7f3d0",
-                                    borderRadius: "6px",
-                                    padding: "6px",
-                                    display: "flex",
-                                    alignItems: "center",
-                                    justifyContent: "center",
-                                    cursor: "pointer"
-                                  }}
-                                  onClick={() => {
-                                    const statusProp = activeProperties.find(prop => prop.field_key === "status");
-                                    if (statusProp) {
-                                      openStatusUpdate(lead, statusProp);
-                                    } else {
-                                      notify("Status property configuration not found", "error");
-                                    }
-                                  }}
-                                  title="Call Lead / Update Status"
-                                >
-                                  <Phone size={14} />
-                                </button>
-                                {(lead.history_keys?.includes("connected_source") || lead.history_keys?.includes("status")) && (
-                                  <button className="cell-icon-button" onClick={() => openHistory(lead.id, ["status", "connected_source"])} title="View Call History">
-                                    <History size={14} />
-                                  </button>
-                                )}
-                              </div>
-                            ) : p.field_key === "client_replay" ? (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '2px', width: "100%" }}>
-                                <input
-                                  style={{
-                                    width: "100%",
-                                    padding: "4px 8px",
-                                    border: "1px solid #cbd5e1",
-                                    borderRadius: "4px",
-                                    fontSize: "12px",
-                                    boxSizing: "border-box"
-                                  }}
-                                  type="text"
-                                  value={draftClientReplays[lead.id] !== undefined ? draftClientReplays[lead.id] : (getPropertyValue(lead, p) || "")}
-                                  disabled={!(canManage || canEditLeads)}
-                                  onChange={(e) => setDraftClientReplays(prev => ({ ...prev, [lead.id]: e.target.value }))}
-                                  placeholder="Enter reply..."
-                                />
-                                {draftClientReplays[lead.id] !== undefined && draftClientReplays[lead.id] !== (getPropertyValue(lead, p) || "") && (
+                        {bulkMode && (
+                          <td className="bulk-select-col">
+                            <input
+                              type="checkbox"
+                              checked={selectedLeadIdSet.has(Number(lead.id))}
+                              onChange={() => toggleLeadSelection(lead.id)}
+                              aria-label={`Select ${lead.company_name}`}
+                            />
+                          </td>
+                        )}
+                        {gridProperties.map((p) => {
+                          const isEditing = editingCell?.leadId === lead.id && editingCell?.fieldKey === p.field_key;
+                          return (
+                            <td
+                              key={p.field_key}
+                              style={{
+                                width: `${getColumnWidth(p)}px`,
+                                minWidth: `${getColumnWidth(p)}px`,
+                                maxWidth: `${getColumnWidth(p)}px`,
+                                overflow: isEditing ? 'visible' : 'hidden',
+                                position: 'relative',
+                                zIndex: isEditing ? 100 : 10
+                              }}
+                              onDoubleClick={() => {
+                                if (p.field_key !== "call_action" && p.field_key !== "assigned_by_name" && p.field_key !== "status" && p.field_key !== "client_replay" && p.field_key !== "connected_source" && !isMultiSelectProperty(p) && p.object_type !== "dropdown" && (canManage || canEditLeads)) {
+                                  setEditingCell({ leadId: lead.id, fieldKey: p.field_key, value: getPropertyValue(lead, p) });
+                                }
+                              }}
+                            >
+                              {isEditing ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '2px' }}>
+                                  {p.object_type === "textarea" ? (
+                                    <textarea
+                                      style={{
+                                        width: "100%",
+                                        padding: "4px",
+                                        border: "1px solid #e2e8f0",
+                                        borderRadius: "4px",
+                                        fontSize: "12px"
+                                      }}
+                                      rows={2}
+                                      value={editingCell.value || ""}
+                                      onChange={(e) => setEditingCell(prev => ({ ...prev, value: e.target.value }))}
+                                    />
+                                  ) : (
+                                    <input
+                                      style={{
+                                        width: "100%",
+                                        padding: "4px",
+                                        border: "1px solid #e2e8f0",
+                                        borderRadius: "4px",
+                                        fontSize: "12px"
+                                      }}
+                                      type={p.object_type === "number" ? "number" : p.object_type === "date" ? "date" : "text"}
+                                      value={editingCell.value || ""}
+                                      onChange={(e) => setEditingCell(prev => ({ ...prev, value: e.target.value }))}
+                                    />
+                                  )}
                                   <div style={{ display: 'flex', gap: '4px' }}>
                                     <button
                                       type="button"
                                       onClick={async () => {
-                                        const val = draftClientReplays[lead.id];
-                                        await handleInlineEdit(lead.id, p, val);
-                                        setDraftClientReplays(prev => {
-                                          const next = { ...prev };
-                                          delete next[lead.id];
-                                          return next;
-                                        });
+                                        await handleInlineEdit(lead.id, p, editingCell.value);
+                                        setEditingCell(null);
                                       }}
                                       style={{
                                         padding: "2px 8px",
@@ -708,13 +614,7 @@ export function MyLeadsPage({ setPage, setEditingId }) {
                                     </button>
                                     <button
                                       type="button"
-                                      onClick={() => {
-                                        setDraftClientReplays(prev => {
-                                          const next = { ...prev };
-                                          delete next[lead.id];
-                                          return next;
-                                        });
-                                      }}
+                                      onClick={() => setEditingCell(null)}
                                       style={{
                                         padding: "2px 8px",
                                         backgroundColor: "#ef4444",
@@ -729,110 +629,210 @@ export function MyLeadsPage({ setPage, setEditingId }) {
                                       Cancel
                                     </button>
                                   </div>
-                                )}
-                              </div>
-                            ) : p.field_key === "status" ? (
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '4px', width: "100%" }}>
-                                <select
-                                  className="inline-select"
-                                  style={{
-                                    flex: 1,
-                                    padding: "4px",
-                                    border: "1px solid #e2e8f0",
-                                    borderRadius: "4px",
-                                    fontSize: "12px",
-                                    fontWeight: "600",
-                                    color: lead.is_inquiry ? "#176b5b" : "inherit"
-                                  }}
-                                  value={getPropertyValue(lead, p) || ""}
-                                  disabled={!(canManage || canEditLeads)}
-                                  onChange={(e) => handleInlineEdit(lead.id, p, e.target.value)}
-                                >
-                                  <option value="">-</option>
-                                  {p.options?.filter(o => o.is_active !== false && COLD_LEAD_STATUSES.includes(o.value)).map(o => (
-                                    <option key={o.value} value={o.value}>{o.label}</option>
-                                  ))}
-                                </select>
-                                {(lead.history_keys?.includes("status") || lead.history_keys?.includes("connected_source")) && (
-                                  <button className="cell-icon-button" onClick={() => openHistory(lead.id, ["status", "connected_source"])} title="View Status History">
-                                    <History size={14} />
+                                </div>
+                              ) : p.field_key === "call_action" ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', justifyContent: 'center' }}>
+                                  <button
+                                    className="cell-icon-button call-action-btn"
+                                    style={{
+                                      backgroundColor: "#d1fae5",
+                                      color: "#065f46",
+                                      border: "1px solid #a7f3d0",
+                                      borderRadius: "6px",
+                                      padding: "6px",
+                                      display: "flex",
+                                      alignItems: "center",
+                                      justifyContent: "center",
+                                      cursor: "pointer"
+                                    }}
+                                    onClick={() => {
+                                      const statusProp = activeProperties.find(prop => prop.field_key === "status");
+                                      if (statusProp) {
+                                        openStatusUpdate(lead, statusProp);
+                                      } else {
+                                        notify("Status property configuration not found", "error");
+                                      }
+                                    }}
+                                    title="Call Lead / Update Status"
+                                  >
+                                    <Phone size={14} />
                                   </button>
-                                )}
-                              </div>
-                          ) : p.field_key === "connected_source" ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <span className="cell-text" title={getPropertyValue(lead, p)} style={{ flex: 1, fontWeight: "600", fontSize: "12px" }}>
-                                {getPropertyValue(lead, p) || "-"}
-                              </span>
-                              <ConnectedSourceActions
-                                companyId={lead.id}
-                                connectedSourceProperty={p}
-                                connectedSourceValue={getPropertyValue(lead, p)}
-                                contactNumber={getPropertyValue(lead, { field_key: "contact_number" })}
-                                emailId={getPropertyValue(lead, { field_key: "email_id" })}
-                                onUpdated={leads.reload}
-                                statusProperty={activeProperties.find(prop => prop.field_key === "status")}
-                                currentStatus={getPropertyValue(lead, { field_key: "status" })}
-                              />
-                              {(lead.history_keys?.includes("connected_source") || lead.history_keys?.includes("status")) && (
-                                <button className="cell-icon-button" onClick={() => openHistory(lead.id, ["status", "connected_source"])} title="View Connected Source History">
-                                  <History size={14} />
-                                </button>
+                                  {(lead.history_keys?.includes("connected_source") || lead.history_keys?.includes("status")) && (
+                                    <button className="cell-icon-button" onClick={() => openHistory(lead.id, ["status", "connected_source"])} title="View Call History">
+                                      <History size={14} />
+                                    </button>
+                                  )}
+                                </div>
+                              ) : p.field_key === "client_replay" ? (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', padding: '2px', width: "100%" }}>
+                                  <input
+                                    style={{
+                                      width: "100%",
+                                      padding: "4px 8px",
+                                      border: "1px solid #cbd5e1",
+                                      borderRadius: "4px",
+                                      fontSize: "12px",
+                                      boxSizing: "border-box"
+                                    }}
+                                    type="text"
+                                    value={draftClientReplays[lead.id] !== undefined ? draftClientReplays[lead.id] : (getPropertyValue(lead, p) || "")}
+                                    disabled={!(canManage || canEditLeads)}
+                                    onChange={(e) => setDraftClientReplays(prev => ({ ...prev, [lead.id]: e.target.value }))}
+                                    placeholder="Enter reply..."
+                                  />
+                                  {draftClientReplays[lead.id] !== undefined && draftClientReplays[lead.id] !== (getPropertyValue(lead, p) || "") && (
+                                    <div style={{ display: 'flex', gap: '4px' }}>
+                                      <button
+                                        type="button"
+                                        onClick={async () => {
+                                          const val = draftClientReplays[lead.id];
+                                          await handleInlineEdit(lead.id, p, val);
+                                          setDraftClientReplays(prev => {
+                                            const next = { ...prev };
+                                            delete next[lead.id];
+                                            return next;
+                                          });
+                                        }}
+                                        style={{
+                                          padding: "2px 8px",
+                                          backgroundColor: "#176b5b",
+                                          color: "#fff",
+                                          border: "none",
+                                          borderRadius: "4px",
+                                          fontSize: "11px",
+                                          fontWeight: "600",
+                                          cursor: "pointer"
+                                        }}
+                                      >
+                                        Save
+                                      </button>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setDraftClientReplays(prev => {
+                                            const next = { ...prev };
+                                            delete next[lead.id];
+                                            return next;
+                                          });
+                                        }}
+                                        style={{
+                                          padding: "2px 8px",
+                                          backgroundColor: "#ef4444",
+                                          color: "#fff",
+                                          border: "none",
+                                          borderRadius: "4px",
+                                          fontSize: "11px",
+                                          fontWeight: "600",
+                                          cursor: "pointer"
+                                        }}
+                                      >
+                                        Cancel
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              ) : p.field_key === "status" ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px', width: "100%" }}>
+                                  <select
+                                    className="inline-select"
+                                    style={{
+                                      flex: 1,
+                                      padding: "4px",
+                                      border: "1px solid #e2e8f0",
+                                      borderRadius: "4px",
+                                      fontSize: "12px",
+                                      fontWeight: "600",
+                                      color: lead.is_inquiry ? "#176b5b" : "inherit"
+                                    }}
+                                    value={getPropertyValue(lead, p) || ""}
+                                    disabled={!(canManage || canEditLeads)}
+                                    onChange={(e) => handleInlineEdit(lead.id, p, e.target.value)}
+                                  >
+                                    <option value="">-</option>
+                                    {p.options?.filter(o => o.is_active !== false && COLD_LEAD_STATUSES.includes(o.value)).map(o => (
+                                      <option key={o.value} value={o.value}>{o.label}</option>
+                                    ))}
+                                  </select>
+                                  {(lead.history_keys?.includes("status") || lead.history_keys?.includes("connected_source")) && (
+                                    <button className="cell-icon-button" onClick={() => openHistory(lead.id, ["status", "connected_source"])} title="View Status History">
+                                      <History size={14} />
+                                    </button>
+                                  )}
+                                </div>
+                              ) : p.field_key === "connected_source" ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <span className="cell-text" title={getPropertyValue(lead, p)} style={{ flex: 1, fontWeight: "600", fontSize: "12px" }}>
+                                    {getPropertyValue(lead, p) || "-"}
+                                  </span>
+                                  <ConnectedSourceActions
+                                    companyId={lead.id}
+                                    connectedSourceProperty={p}
+                                    connectedSourceValue={getPropertyValue(lead, p)}
+                                    contactNumber={getPropertyValue(lead, { field_key: "contact_number" })}
+                                    emailId={getPropertyValue(lead, { field_key: "email_id" })}
+                                    onUpdated={leads.reload}
+                                    statusProperty={activeProperties.find(prop => prop.field_key === "status")}
+                                    currentStatus={getPropertyValue(lead, { field_key: "status" })}
+                                  />
+                                  {(lead.history_keys?.includes("connected_source") || lead.history_keys?.includes("status")) && (
+                                    <button className="cell-icon-button" onClick={() => openHistory(lead.id, ["status", "connected_source"])} title="View Connected Source History">
+                                      <History size={14} />
+                                    </button>
+                                  )}
+                                </div>
+                              ) : isMultiSelectProperty(p) ? (
+                                <div className="inline-multi-select">
+                                  <GridFilterDropdown
+                                    label={formatPropertyValue(p, getPropertyValue(lead, p)) || "-"}
+                                    options={propertyOptions(p)}
+                                    value={splitMultiValue(getPropertyValue(lead, p))}
+                                    onChange={(val) => handleInlineEdit(lead.id, p, val.join(","))}
+                                    isMulti={true}
+                                  />
+                                </div>
+                              ) : p.object_type === "dropdown" ? (
+                                <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                                  <select
+                                    className="inline-select"
+                                    style={{
+                                      flex: 1,
+                                      padding: "4px",
+                                      border: "1px solid #e2e8f0",
+                                      borderRadius: "4px",
+                                      fontSize: "12px",
+                                      ...getVerificationStatusStyle(getPropertyValue(lead, p))
+                                    }}
+                                    value={getPropertyValue(lead, p) || ""}
+                                    onChange={(e) => handleInlineEdit(lead.id, p, e.target.value)}
+                                  >
+                                    <option value="">-</option>
+                                    {p.options?.map(o => (
+                                      <option key={o.value} value={o.value}>{o.label}</option>
+                                    ))}
+                                  </select>
+                                  {lead.history_keys?.includes(p.field_key) && (
+                                    <button type="button" className="cell-icon-button" onClick={() => openHistory(lead.id, p.field_key)} title={`View ${p.name} History`} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
+                                      <History size={14} style={{ color: "#64748b" }} />
+                                    </button>
+                                  )}
+                                </div>
+                              ) : (
+                                <span className="cell-text" title={getPropertyValue(lead, p)}>
+                                  {p.field_key === "company_name" ? <strong>{getPropertyValue(lead, p)}</strong> : getPropertyValue(lead, p)}
+                                </span>
                               )}
+                            </td>
+                          );
+                        })}
+                        {canManage && (
+                          <td>
+                            <div className="row-actions">
+                              <button type="button" className="secondary icon-only" onClick={() => edit(lead)} title="Edit Company"><Pencil size={16} /></button>
+                              <button type="button" className="danger icon-only" onClick={() => remove(lead)} title="Delete Company"><Trash2 size={16} /></button>
                             </div>
-                          ) : isMultiSelectProperty(p) ? (
-                            <div className="inline-multi-select">
-                              <GridFilterDropdown
-                                label={formatPropertyValue(p, getPropertyValue(lead, p)) || "-"}
-                                options={propertyOptions(p)}
-                                value={splitMultiValue(getPropertyValue(lead, p))}
-                                onChange={(val) => handleInlineEdit(lead.id, p, val.join(","))}
-                                isMulti={true}
-                              />
-                            </div>
-                          ) : p.object_type === "dropdown" ? (
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                              <select
-                                className="inline-select"
-                                style={{
-                                  flex: 1,
-                                  padding: "4px",
-                                  border: "1px solid #e2e8f0",
-                                  borderRadius: "4px",
-                                  fontSize: "12px",
-                                  ...getVerificationStatusStyle(getPropertyValue(lead, p))
-                                }}
-                                value={getPropertyValue(lead, p) || ""}
-                                onChange={(e) => handleInlineEdit(lead.id, p, e.target.value)}
-                              >
-                                <option value="">-</option>
-                                {p.options?.map(o => (
-                                  <option key={o.value} value={o.value}>{o.label}</option>
-                                ))}
-                              </select>
-                              {lead.history_keys?.includes(p.field_key) && (
-                                <button type="button" className="cell-icon-button" onClick={() => openHistory(lead.id, p.field_key)} title={`View ${p.name} History`} style={{ padding: "4px", background: "none", border: "none", cursor: "pointer", display: "flex", alignItems: "center" }}>
-                                  <History size={14} style={{ color: "#64748b" }} />
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="cell-text" title={getPropertyValue(lead, p)}>
-                              {p.field_key === "company_name" ? <strong>{getPropertyValue(lead, p)}</strong> : getPropertyValue(lead, p)}
-                            </span>
-                          )}
-                        </td>
-                      );
-                      })}
-                      {canManage && (
-                        <td>
-                          <div className="row-actions">
-                            <button type="button" className="secondary icon-only" onClick={() => edit(lead)} title="Edit Company"><Pencil size={16} /></button>
-                            <button type="button" className="danger icon-only" onClick={() => remove(lead)} title="Delete Company"><Trash2 size={16} /></button>
-                          </div>
-                        </td>
-                      )}
-                    </tr>
+                          </td>
+                        )}
+                      </tr>
                     );
                   })}
                 </tbody>

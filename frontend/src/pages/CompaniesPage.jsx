@@ -173,14 +173,34 @@ export function CompaniesPage({ setPage, editingId, setEditingId }) {
       return;
     }
 
+    const list = Array.isArray(companies.data)
+      ? companies.data
+      : (companies.data?.companies || []);
+
     try {
       const results = await Promise.all(
-        selectedCompanyIds.map(companyId =>
-          api.updateCompanyInline(companyId, {
+        selectedCompanyIds.map(companyId => {
+          const comp = list.find(c => Number(c.id) === Number(companyId));
+          const currentVal = comp?.property_values?.find(pv => pv.field_key === "company")?.value || "";
+          
+          let newValue = bulkAssignUser;
+          if (bulkAssignUser !== "unassigned") {
+            const existingIds = currentVal
+              .split(",")
+              .map(s => s.strip ? s.strip() : s.trim())
+              .filter(s => s && s !== "unassigned");
+              
+            if (!existingIds.includes(bulkAssignUser)) {
+              existingIds.push(bulkAssignUser);
+            }
+            newValue = existingIds.join(",");
+          }
+          
+          return api.updateCompanyInline(companyId, {
             property_id: companyProperty.id,
-            value: bulkAssignUser
-          })
-        )
+            value: newValue
+          });
+        })
       );
       
       notify("Bulk data assignment updated successfully", "success");

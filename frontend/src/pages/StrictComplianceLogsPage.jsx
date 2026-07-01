@@ -12,11 +12,11 @@ export function StrictComplianceLogsPage() {
   const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split("T")[0]);
   const [selectedUserId, setSelectedUserId] = useState("");
   const [loading, setLoading] = useState(false);
-  
+
   // Track which user groups and task groups are expanded
   const [expandedUsers, setExpandedUsers] = useState({});
   const [expandedTasks, setExpandedTasks] = useState({});
-  
+
   // Track expanded users for location logs
   const [expandedLocUsers, setExpandedLocUsers] = useState({});
   const [geoPermission, setGeoPermission] = useState("prompt"); // prompt, granted, denied
@@ -36,7 +36,7 @@ export function StrictComplianceLogsPage() {
             setGeoPermission(result.state);
           };
         })
-        .catch(() => {});
+        .catch(() => { });
     }
   }, []);
 
@@ -49,7 +49,7 @@ export function StrictComplianceLogsPage() {
           user_id: selectedUserId || undefined
         });
         setReports(data);
-        
+
         // Auto-expand all users and tasks by default
         const initialUsers = {};
         const initialTasks = {};
@@ -66,7 +66,7 @@ export function StrictComplianceLogsPage() {
           user_id: selectedUserId || undefined
         });
         setLocationLogs(data);
-        
+
         // Auto-expand all location users by default
         const initialLocUsers = {};
         data.forEach((log) => {
@@ -295,7 +295,7 @@ export function StrictComplianceLogsPage() {
               const isUserExpanded = expandedUsers[userGroup.userEmail];
               return (
                 <div key={userGroup.userEmail} style={{ background: "#ffffff", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", border: "1px solid #e2e8f0", overflow: "hidden" }}>
-                  <div 
+                  <div
                     onClick={() => toggleUser(userGroup.userEmail)}
                     style={{ padding: "16px 24px", background: "#f8fafc", borderBottom: isUserExpanded ? "1px solid #e2e8f0" : "none", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", userSelect: "none" }}
                   >
@@ -323,7 +323,7 @@ export function StrictComplianceLogsPage() {
                         const isTaskExpanded = expandedTasks[taskKey];
                         return (
                           <div key={taskTitle} style={{ border: "1px solid #e2e8f0", borderRadius: "10px", overflow: "hidden" }}>
-                            <div 
+                            <div
                               onClick={() => toggleTask(taskKey)}
                               style={{ padding: "12px 20px", background: "#f1f5f9", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", borderBottom: isTaskExpanded ? "1px solid #e2e8f0" : "none", userSelect: "none" }}
                             >
@@ -417,7 +417,7 @@ export function StrictComplianceLogsPage() {
               const isLocExpanded = expandedLocUsers[locGroup.userEmail];
               return (
                 <div key={locGroup.userEmail} style={{ background: "#ffffff", borderRadius: "12px", boxShadow: "0 1px 3px rgba(0,0,0,0.05)", border: "1px solid #e2e8f0", overflow: "hidden" }}>
-                  <div 
+                  <div
                     onClick={() => toggleLocUser(locGroup.userEmail)}
                     style={{ padding: "16px 24px", background: "#f8fafc", borderBottom: isLocExpanded ? "1px solid #e2e8f0" : "none", display: "flex", justifyContent: "space-between", alignItems: "center", cursor: "pointer", userSelect: "none" }}
                   >
